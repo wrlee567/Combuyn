@@ -1,0 +1,44 @@
+# Local development stack: Postgres + FastAPI + Vite dev server.
+#   docker compose up --build
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: combuyn
+      POSTGRES_PASSWORD: combuyn
+      POSTGRES_DB: combuyn
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U combuyn"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://combuyn:combuyn@db:5432/combuyn
+      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      SEED_ON_STARTUP: "true"
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build: ./frontend
+    environment:
+      # Empty base = same-origin; the Vite dev proxy forwards /api to the api service.
+      VITE_API_BASE_URL: ""
+      PROXY_TARGET: http://api:8000
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
