@@ -2,6 +2,8 @@
 // In dev, Vite proxies these paths to the FastAPI backend (see vite.config.ts).
 // In production (Vercel), set VITE_API_BASE_URL to the Render backend URL.
 
+import { demoCoverage, demoFrameworks, demoSummary } from "./demoData";
+
 const BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
 export interface Summary {
@@ -46,8 +48,18 @@ async function get<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// Try the live API; if it's unreachable (e.g. a Vercel preview with no backend
+// wired up yet), fall back to bundled demo data so the UI stays populated.
+async function getOrDemo<T>(path: string, demo: T): Promise<T> {
+  try {
+    return await get<T>(path);
+  } catch {
+    return demo;
+  }
+}
+
 export const api = {
-  summary: () => get<Summary>("/api/summary"),
-  frameworks: () => get<Framework[]>("/api/frameworks"),
-  coverage: () => get<ControlCoverage[]>("/api/coverage"),
+  summary: () => getOrDemo<Summary>("/api/summary", demoSummary),
+  frameworks: () => getOrDemo<Framework[]>("/api/frameworks", demoFrameworks),
+  coverage: () => getOrDemo<ControlCoverage[]>("/api/coverage", demoCoverage),
 };
