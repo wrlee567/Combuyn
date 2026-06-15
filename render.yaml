@@ -1,0 +1,27 @@
+# Render blueprint — FastAPI backend + managed Postgres.
+# The React frontend deploys separately on Vercel (see frontend/vercel.json).
+services:
+  - type: web
+    name: combuyn-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: combuyn-db
+          property: connectionString
+      - key: SEED_ON_STARTUP
+        value: "true"
+      - key: ENVIRONMENT
+        value: production
+      # Set this to your Vercel frontend origin after the first deploy.
+      - key: CORS_ORIGINS
+        sync: false
+
+databases:
+  - name: combuyn-db
+    databaseName: combuyn
+    user: combuyn
+    plan: free
