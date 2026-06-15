@@ -6,3 +6,16 @@ export function badgeClass(frameworkKey: string): string {
   if (k.includes("nist")) return "badge nist";
   return "badge generic";
 }
+
+// Map an inherent-risk tier to a CSS badge class.
+export function riskClass(tier: string): string {
+  return `badge risk-${tier.toLowerCase()}`;
+}
+
+// Human-friendly label for snake_case enum values (e.g. "financial_services").
+export function humanize(value: string): string {
+  return value
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}

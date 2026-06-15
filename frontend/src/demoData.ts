@@ -1,7 +1,12 @@
 // Bundled demo data so the frontend renders a complete, realistic view when no
 // backend is reachable (e.g. a Vercel preview deploy before the Render API is
 // wired up). Mirrors the backend CCF seed in app/seed/ccf_reference.py.
-import type { ControlCoverage, Framework, Summary } from "./api";
+import type {
+  ControlCoverage,
+  Framework,
+  Summary,
+  VendorSummary,
+} from "./api";
 
 export const demoSummary: Summary = {
   frameworks: 3,
@@ -129,5 +134,42 @@ export const demoCoverage: ControlCoverage[] = [
       { framework_key: "pci_dss", framework_name: "PCI DSS", citation: "6.3", title: "Security in software development", relationship_type: "intersects" },
       { framework_key: "soc2", framework_name: "SOC 2", citation: "CC8.1", title: "Change management", relationship_type: "intersects" },
     ],
+  },
+];
+
+// Sample vendors mirroring backend seed (scores match the live scoring rules),
+// ordered by descending inherent risk like the API returns them.
+export const demoVendors: VendorSummary[] = [
+  {
+    id: "demo-vendor-northwind",
+    name: "Northwind Payments",
+    industry: "financial_services",
+    lifecycle_status: "assessment",
+    inherent_risk_score: 95,
+    inherent_risk_tier: "Critical",
+  },
+  {
+    id: "demo-vendor-brightline",
+    name: "Brightline Health Systems",
+    industry: "healthcare",
+    lifecycle_status: "onboarding",
+    inherent_risk_score: 75,
+    inherent_risk_tier: "High",
+  },
+  {
+    id: "demo-vendor-cedar",
+    name: "Cedar Analytics",
+    industry: "technology",
+    lifecycle_status: "monitoring",
+    inherent_risk_score: 55,
+    inherent_risk_tier: "High",
+  },
+  {
+    id: "demo-vendor-office",
+    name: "Office Supplies Direct",
+    industry: "retail",
+    lifecycle_status: "management",
+    inherent_risk_score: 7,
+    inherent_risk_tier: "Low",
   },
 ];

@@ -25,9 +25,16 @@ health check, deploy configs for **Render** (backend + Postgres) and **Vercel** 
 - UI: dashboard + frameworks list + **control-coverage matrix** (one control → many frameworks).
 - Multi-tenancy via `org_id` scoping (full Postgres RLS tracked for a later iteration).
 
-## ⬜ Iteration 2 — TPRM Vendors
-Vendor entity, **inherent risk scoring** (industry × data classification × connectivity),
-JSONB-backed dynamic questionnaires, vendor list/detail UI.
+## ✅ Iteration 2 — TPRM Vendors
+- `vendors` table with the six-phase TPRM lifecycle (sourcing → offboarding).
+- **Inherent risk scoring** engine (pure, tested): data classification × network
+  connectivity × industry × geography → 0-100 score + tier + per-factor breakdown.
+- JSONB-backed **dynamic security questionnaire** (template in code, answers merged
+  into JSONB; partial saves don't clobber prior answers).
+- API: list/create/get vendors, `/options`, `/questionnaire-template`, plus
+  lifecycle + questionnaire PATCH endpoints.
+- UI: Vendors list (risk-sorted), Add Vendor form, Vendor detail (profile, risk
+  breakdown, lifecycle control, questionnaire); demo fallback for previews.
 
 ## ⬜ Iteration 3 — Workflow Orchestration Engine
 Lightweight **durable Python state machine** (state persisted to Postgres, resumes after crash),

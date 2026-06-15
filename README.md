@@ -41,6 +41,8 @@ through. This repo currently delivers:
 - **Iteration 0 — Foundation:** monorepo, Docker Compose, CI, health check, deploy configs.
 - **Iteration 1 — CCF Core:** Frameworks / Requirements / Common Controls with many-to-many
   mappings, seeded with real SOC 2 / PCI DSS / NIST citations, plus a control-coverage UI.
+- **Iteration 2 — TPRM Vendors:** vendor lifecycle, inherent risk scoring engine, JSONB
+  security questionnaires, and a risk-sorted vendor list + detail UI.
 
 ## Quick start (local)
 

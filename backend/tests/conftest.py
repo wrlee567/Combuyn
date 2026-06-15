@@ -23,7 +23,7 @@ from sqlalchemy.pool import StaticPool  # noqa: E402
 
 from app.database import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
-from app.seed.seeder import seed_ccf  # noqa: E402
+from app.seed.seeder import seed_ccf, seed_vendors  # noqa: E402
 
 
 @pytest.fixture()
@@ -38,6 +38,7 @@ def db_session():
 
     with TestingSession() as session:
         seed_ccf(session)
+        seed_vendors(session)
 
     yield TestingSession
     Base.metadata.drop_all(bind=engine)

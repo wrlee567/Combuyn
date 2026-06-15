@@ -10,10 +10,12 @@ from app.models.ccf import (
     Framework,
     FrameworkRequirement,
 )
+from app.models.vendor import Vendor
 
 __all__ = [
     "Framework",
     "FrameworkRequirement",
     "CommonControl",
     "ControlRequirementMapping",
+    "Vendor",
 ]
