@@ -11,7 +11,10 @@ from app.models.ccf import (
     Framework,
     FrameworkRequirement,
 )
+from app.models.vendor import Vendor
 from app.seed.ccf_reference import COMMON_CONTROLS, FRAMEWORKS, REQUIREMENTS
+from app.seed.vendors_reference import SAMPLE_VENDORS
+from app.services.risk_scoring import compute_inherent_risk
 
 
 def seed_ccf(db: Session) -> dict[str, int]:
@@ -94,5 +97,28 @@ def seed_ccf(db: Session) -> dict[str, int]:
                 )
                 created["mappings"] += 1
 
+    db.commit()
+    return created
+
+
+def seed_vendors(db: Session) -> int:
+    """Insert sample vendors (idempotent by name). Returns rows created."""
+    created = 0
+    for data in SAMPLE_VENDORS:
+        exists = db.scalar(select(Vendor).where(Vendor.name == data["name"]))
+        if exists is not None:
+            continue
+        vendor = Vendor(**data)
+        result = compute_inherent_risk(
+            data_classification=vendor.data_classification,
+            network_connectivity=vendor.network_connectivity,
+            industry=vendor.industry,
+            geography=vendor.geography,
+        )
+        vendor.inherent_risk_score = result.score
+        vendor.inherent_risk_tier = result.tier
+        vendor.risk_breakdown = result.breakdown
+        db.add(vendor)
+        created += 1
     db.commit()
     return created

@@ -9,10 +9,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.api import ccf, health
+from app.api import ai_governance, ccf, health, vendors
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
-from app.seed.seeder import seed_ccf
+from app.seed.ai_governance import seed_ai_governance
+from app.seed.seeder import seed_ccf, seed_vendors
 
 # Ensure models are registered on Base.metadata.
 import app.models  # noqa: F401  (side-effect import)
@@ -31,8 +32,14 @@ async def lifespan(app: FastAPI):
     if settings.seed_on_startup:
         with SessionLocal() as db:
             created = seed_ccf(db)
+            vendors_created = seed_vendors(db)
+            ai_created = seed_ai_governance(db)
         if any(created.values()):
             logger.info("Seeded CCF reference data: %s", created)
+        if vendors_created:
+            logger.info("Seeded sample vendors: %d", vendors_created)
+        if any(ai_created.values()):
+            logger.info("Seeded AI governance reference data: %s", ai_created)
     yield
 
 
@@ -53,6 +60,9 @@ app.add_middleware(
 
 app.include_router(health.router)
 app.include_router(ccf.router)
+app.include_router(vendors.router)
+app.include_router(ai_governance.router)
+app.include_router(ai_governance.trust_router)
 
 
 @app.get("/", tags=["health"])

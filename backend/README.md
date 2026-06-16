@@ -48,6 +48,13 @@ alembic upgrade head
 | GET | `/api/frameworks/{id}/requirements` | Requirements for a framework |
 | GET | `/api/controls` | List common controls |
 | GET | `/api/coverage` | **Control-coverage matrix** (one control → many frameworks) |
+| GET | `/api/vendors` | List vendors (risk-sorted) |
+| POST | `/api/vendors` | Create a vendor (computes inherent risk) |
+| GET | `/api/vendors/{id}` | Vendor detail (profile, risk breakdown, answers) |
+| GET | `/api/vendors/options` | Allowed risk factors + lifecycle phases |
+| GET | `/api/vendors/questionnaire-template` | Security questionnaire template |
+| PATCH | `/api/vendors/{id}/questionnaire` | Save questionnaire answers (merged) |
+| PATCH | `/api/vendors/{id}/lifecycle` | Advance the TPRM lifecycle phase |
 
 ## Layout
 
@@ -55,10 +62,11 @@ alembic upgrade head
 app/
   config.py        settings (env-driven)
   database.py      engine, session, Base, URL normalization
-  models/          ORM models (ccf.py) + cross-dialect types
+  models/          ORM models (ccf.py, vendor.py) + cross-dialect types
   schemas/         Pydantic I/O models
-  api/             routers (health.py, ccf.py)
-  seed/            bundled CCF reference data + idempotent seeder
+  api/             routers (health.py, ccf.py, vendors.py)
+  services/        domain logic (risk_scoring.py)
+  seed/            bundled reference data + idempotent seeder
 alembic/           migration environment
 tests/             pytest suite (SQLite)
 ```
