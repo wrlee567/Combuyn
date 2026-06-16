@@ -14,6 +14,7 @@ import type {
   MedicalAIRisk,
   Summary,
   TrustCenter,
+  VendorSummary,
 } from "./api";
 
 export const demoSummary: Summary = {
@@ -377,6 +378,41 @@ export const demoMedicalRisks: MedicalAIRisk[] = [
     clinical_validation_status: "protocol required",
     risk_controls: "Clinician override, locked validation protocol, post-market monitoring, and SOUP supplier review.",
     review_status: "required",
+  },
+];
+
+export const demoTPRMVendors: VendorSummary[] = [
+  {
+    id: "demo-vendor-northwind",
+    name: "Northwind Payments",
+    industry: "financial_services",
+    lifecycle_status: "assessment",
+    inherent_risk_score: 95,
+    inherent_risk_tier: "Critical",
+  },
+  {
+    id: "demo-vendor-brightline",
+    name: "Brightline Health Systems",
+    industry: "healthcare",
+    lifecycle_status: "onboarding",
+    inherent_risk_score: 75,
+    inherent_risk_tier: "High",
+  },
+  {
+    id: "demo-vendor-cedar",
+    name: "Cedar Analytics",
+    industry: "technology",
+    lifecycle_status: "monitoring",
+    inherent_risk_score: 55,
+    inherent_risk_tier: "High",
+  },
+  {
+    id: "demo-vendor-office",
+    name: "Office Supplies Direct",
+    industry: "retail",
+    lifecycle_status: "management",
+    inherent_risk_score: 7,
+    inherent_risk_tier: "Low",
   },
 ];
 
