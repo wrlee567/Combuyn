@@ -78,3 +78,60 @@ def test_invalid_factor_raises():
 )
 def test_tier_boundaries(score, tier):
     assert tier_for_score(score) == tier
+
+
+def test_factor_weights_sum_to_one():
+    from app.services.risk_scoring import FACTOR_WEIGHTS
+
+    total = sum(FACTOR_WEIGHTS.values())
+    assert abs(total - 1.0) < 1e-9
+
+
+def test_factor_options_returns_all_keys():
+    from app.services.risk_scoring import factor_options
+
+    opts = factor_options()
+    assert set(opts.keys()) == {"data_classification", "network_connectivity", "industry", "geography"}
+
+
+def test_all_industry_values_have_severity():
+    from app.services.risk_scoring import INDUSTRY
+
+    for value in INDUSTRY:
+        result = compute_inherent_risk(
+            data_classification="internal",
+            network_connectivity="limited",
+            industry=value,
+            geography="domestic",
+        )
+        assert 0 <= result.score <= 100
+
+
+def test_all_geography_values_have_severity():
+    from app.services.risk_scoring import GEOGRAPHY
+
+    for value in GEOGRAPHY:
+        result = compute_inherent_risk(
+            data_classification="internal",
+            network_connectivity="limited",
+            industry="technology",
+            geography=value,
+        )
+        assert 0 <= result.score <= 100
+
+
+def test_score_is_float_between_0_and_100():
+    for dc, nc, ind, geo in [
+        ("public", "none", "technology", "domestic"),
+        ("restricted", "privileged", "financial_services", "high_risk"),
+        ("confidential", "integrated", "healthcare", "eu_eea"),
+        ("internal", "limited", "retail", "international"),
+    ]:
+        result = compute_inherent_risk(
+            data_classification=dc,
+            network_connectivity=nc,
+            industry=ind,
+            geography=geo,
+        )
+        assert isinstance(result.score, int)
+        assert 0 <= result.score <= 100

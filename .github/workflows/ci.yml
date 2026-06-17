@@ -22,7 +22,11 @@ jobs:
       - name: Lint
         run: ruff check app tests
       - name: Tests
-        run: pytest
+        run: pytest --cov=app --cov-fail-under=70 --cov-report=term-missing
+      - name: Security scan (bandit)
+        run: |
+          pip install bandit
+          bandit -r app -ll
 
   frontend:
     name: Frontend (typecheck + build)
