@@ -28,7 +28,7 @@ Render (API+DB) + Vercel (frontend, root `frontend`) · mock-first, no cloud cre
 Feature branch → PR into `main`; both CI jobs green. One task per session.
 
 ## Status
-✅ Iter 0–2 (Foundation, CCF, TPRM Vendors; PR #2 → main). 🚧 `codex/ai-governance`
-(ISO 42001 / EU AI Act / NIST AI RMF / Trust Center) — good module, but regressed Iter 2
-wiring (CI red); re-plug vendors additively in `main.py`, `models/__init__.py`,
-`tests/conftest.py`, `frontend/src/api.ts`. ⬜ Next: Iter 3 Workflow Orchestration.
+✅ Iter 0–2 (Foundation, CCF, TPRM Vendors). 🚧 AI Governance (ISO 42001, EU AI Act, NIST
+AI RMF, Trust Center) — re-plug vendors in `main.py`, `models/__init__.py`, `conftest.py`,
+`api.ts`. ⬜ Next: Iter 3 (Workflow Orchestration) → Iter 4 (Evidence & Compliance) →
+Iter 5 (BI Dashboards & ROI).
