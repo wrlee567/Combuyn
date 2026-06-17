@@ -124,3 +124,45 @@ def test_options_and_template(client):
     template = client.get("/api/vendors/questionnaire-template").json()
     assert template["version"]
     assert any(s["section"] == "Access Control" for s in template["sections"])
+
+
+def test_get_vendor_invalid_uuid(client):
+    resp = client.get("/api/vendors/not-a-uuid")
+    assert resp.status_code == 422
+
+
+def test_create_vendor_missing_required_field(client):
+    resp = client.post("/api/vendors", json={"industry": "technology"})
+    assert resp.status_code == 422
+
+
+def test_create_vendor_name_over_limit(client):
+    resp = _create(client, name="x" * 256)
+    assert resp.status_code == 422
+
+
+def test_lifecycle_invalid_transition(client):
+    vendor = _create(client).json()
+    resp = client.patch(
+        f"/api/vendors/{vendor['id']}/lifecycle",
+        json={"lifecycle_status": "limbo"},
+    )
+    assert resp.status_code == 422
+
+
+def test_questionnaire_boolean_answer_accepted(client):
+    vendor = _create(client).json()
+    resp = client.patch(
+        f"/api/vendors/{vendor['id']}/questionnaire",
+        json={"responses": {"mfa_enforced": True}},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["questionnaire_responses"]["mfa_enforced"] is True
+
+
+def test_update_nonexistent_vendor(client):
+    resp = client.patch(
+        "/api/vendors/00000000-0000-0000-0000-000000000099/lifecycle",
+        json={"lifecycle_status": "offboarding"},
+    )
+    assert resp.status_code == 404
