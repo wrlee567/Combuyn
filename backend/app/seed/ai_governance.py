@@ -36,22 +36,12 @@ from app.seed.ai_governance_reference import (
 from app.services.ai_governance import classify_eu_ai_act, compliance_tasks_for
 
 
-def seed_ai_governance(db: Session) -> dict[str, int]:
-    """Populate AI governance reference data and representative systems."""
-    created = {
-        "iso_objectives": 0,
-        "iso_controls": 0,
-        "ai_systems": 0,
-        "classifications": 0,
-        "tasks": 0,
-        "guardrails": 0,
-        "governance_reviews": 0,
-        "evidence_items": 0,
-        "impact_assessments": 0,
-        "medical_risks": 0,
-        "vendors": 0,
-        "trust_center": 0,
-    }
+def seed_ai_reference(db: Session) -> dict[str, int]:
+    """Seed the immutable ISO 42001 Annex A catalog (objectives + controls).
+
+    This is standards reference data and is safe to seed in production.
+    """
+    created = {"iso_objectives": 0, "iso_controls": 0}
 
     objective_by_code: dict[str, ISO42001ControlObjective] = {}
     for code, title, description in ISO42001_OBJECTIVES:
@@ -91,6 +81,34 @@ def seed_ai_governance(db: Session) -> dict[str, int]:
             db.flush()
             created["iso_controls"] += 1
         control_by_id[control_id] = control
+
+    db.commit()
+    return created
+
+
+def seed_ai_demo(db: Session) -> dict[str, int]:
+    """Seed illustrative AI systems, classifications, guardrails, governance
+    reviews, vendors, and trust-center records.
+
+    This is sample/demo data and MUST NOT be seeded in production.
+    Depends on :func:`seed_ai_reference` having populated the ISO 42001 catalog.
+    """
+    created = {
+        "ai_systems": 0,
+        "classifications": 0,
+        "tasks": 0,
+        "guardrails": 0,
+        "governance_reviews": 0,
+        "evidence_items": 0,
+        "impact_assessments": 0,
+        "medical_risks": 0,
+        "vendors": 0,
+        "trust_center": 0,
+    }
+
+    control_by_id: dict[str, ISO42001AnnexAControl] = {
+        c.control_id: c for c in db.scalars(select(ISO42001AnnexAControl))
+    }
 
     soup_component = db.scalar(
         select(MedicalSOUPComponent).where(
@@ -462,4 +480,11 @@ def seed_ai_governance(db: Session) -> dict[str, int]:
             created["trust_center"] += 1
 
     db.commit()
+    return created
+
+
+def seed_ai_governance(db: Session) -> dict[str, int]:
+    """Seed AI governance reference + demo data (used by tests and demo runs)."""
+    created = seed_ai_reference(db)
+    created.update(seed_ai_demo(db))
     return created

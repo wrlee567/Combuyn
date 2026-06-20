@@ -18,8 +18,13 @@ class Settings(BaseSettings):
     # Comma-separated list of allowed CORS origins for the React frontend.
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
-    # Seed the database with the bundled CCF reference data on startup.
+    # Seed immutable reference data (frameworks, controls, ISO 42001 catalog)
+    # on startup. Safe for production.
     seed_on_startup: bool = True
+
+    # Seed sample/demo records (example vendors, AI systems, trust-center data).
+    # MUST stay false in production — these are illustrative, not real data.
+    seed_demo_data: bool = False
 
     @property
     def cors_origin_list(self) -> list[str]:

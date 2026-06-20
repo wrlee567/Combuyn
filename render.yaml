@@ -12,8 +12,12 @@ services:
         fromDatabase:
           name: combuyn-db
           property: connectionString
+      # Seed immutable reference data (frameworks, controls, ISO 42001 catalog).
       - key: SEED_ON_STARTUP
         value: "true"
+      # Never seed sample/demo records in production.
+      - key: SEED_DEMO_DATA
+        value: "false"
       - key: ENVIRONMENT
         value: production
       # Set this to your Vercel frontend origin after the first deploy.
