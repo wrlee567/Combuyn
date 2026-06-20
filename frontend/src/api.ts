@@ -379,6 +379,11 @@ type ResponseBody =
   | { kind: "text"; value: string; contentType: string };
 
 function apiUrl(path: string): string {
+  if (!BASE && import.meta.env.PROD && !DEMO_MODE) {
+    throw new Error(
+      "VITE_API_BASE_URL is not configured. Set it to the deployed backend URL or enable VITE_DEMO_MODE=true for a backendless preview.",
+    );
+  }
   return `${BASE}${path}`;
 }
 

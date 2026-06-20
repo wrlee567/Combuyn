@@ -20,7 +20,8 @@ npm run lint     # tsc --noEmit
 ## Deploy (Vercel)
 
 - Framework preset: **Vite** (see `vercel.json`).
-- Set `VITE_API_BASE_URL` to the Render backend URL (e.g. `https://combuyn-api.onrender.com`).
+- Set `VITE_API_BASE_URL` to the actual deployed Render backend URL.
+- For backendless previews only, set `VITE_DEMO_MODE=true`.
 - SPA rewrites are configured so client-side routes work on refresh.
 
 ## Pages
