@@ -13,6 +13,8 @@ from app.models.ccf import (
 from app.models.ai_governance import (
     AIComplianceTask,
     AIDataPrivacyGuardrail,
+    AIEvidenceItem,
+    AIGovernanceReview,
     AIImpactAssessment,
     AIInfrastructureValidationCheck,
     AIRiskClassification,
@@ -27,6 +29,7 @@ from app.models.ai_governance import (
     TrustCenterDocumentRequest,
     TrustCenterFrameworkStatus,
 )
+from app.models.vendor import Vendor
 
 __all__ = [
     "Framework",
@@ -35,6 +38,8 @@ __all__ = [
     "ControlRequirementMapping",
     "AIComplianceTask",
     "AIDataPrivacyGuardrail",
+    "AIEvidenceItem",
+    "AIGovernanceReview",
     "AIImpactAssessment",
     "AIInfrastructureValidationCheck",
     "AIRiskClassification",
@@ -48,4 +53,5 @@ __all__ = [
     "TrustCenterAITransparencyMetric",
     "TrustCenterDocumentRequest",
     "TrustCenterFrameworkStatus",
+    "Vendor",
 ]

@@ -15,6 +15,7 @@ import type {
   MedicalAIRisk,
   Summary,
   TrustCenter,
+  VendorSummary,
 } from "./api";
 
 export const demoSummary: Summary = {
@@ -143,6 +144,43 @@ export const demoCoverage: ControlCoverage[] = [
       { framework_key: "pci_dss", framework_name: "PCI DSS", citation: "6.3", title: "Security in software development", relationship_type: "intersects" },
       { framework_key: "soc2", framework_name: "SOC 2", citation: "CC8.1", title: "Change management", relationship_type: "intersects" },
     ],
+  },
+];
+
+// Sample vendors mirroring backend seed (scores match the live scoring rules),
+// ordered by descending inherent risk like the API returns them.
+export const demoVendors: VendorSummary[] = [
+  {
+    id: "demo-vendor-northwind",
+    name: "Northwind Payments",
+    industry: "financial_services",
+    lifecycle_status: "assessment",
+    inherent_risk_score: 95,
+    inherent_risk_tier: "Critical",
+  },
+  {
+    id: "demo-vendor-brightline",
+    name: "Brightline Health Systems",
+    industry: "healthcare",
+    lifecycle_status: "onboarding",
+    inherent_risk_score: 75,
+    inherent_risk_tier: "High",
+  },
+  {
+    id: "demo-vendor-cedar",
+    name: "Cedar Analytics",
+    industry: "technology",
+    lifecycle_status: "monitoring",
+    inherent_risk_score: 55,
+    inherent_risk_tier: "High",
+  },
+  {
+    id: "demo-vendor-office",
+    name: "Office Supplies Direct",
+    industry: "retail",
+    lifecycle_status: "management",
+    inherent_risk_score: 7,
+    inherent_risk_tier: "Low",
   },
 ];
 
@@ -558,7 +596,7 @@ export const demoMedicalRisks: MedicalAIRisk[] = [
   },
 ];
 
-export const demoVendors: AIVendor[] = [
+export const demoAIVendors: AIVendor[] = [
   {
     id: "vendor-1",
     name: "Hosted Model Provider",
