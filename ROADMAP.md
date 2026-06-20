@@ -36,10 +36,18 @@ health check, deploy configs for **Render** (backend + Postgres) and **Vercel** 
 - UI: Vendors list (risk-sorted), Add Vendor form, Vendor detail (profile, risk
   breakdown, lifecycle control, questionnaire); demo fallback for previews.
 
-## ⬜ Iteration 3 — Workflow Orchestration Engine
-Lightweight **durable Python state machine** (state persisted to Postgres, resumes after crash),
-Saga/compensating transactions, **JSON blueprints** rendered visually with React Flow,
-**observer pattern → Slack** notifications on state transitions.
+## ✅ Iteration 3 — Workflow Orchestration Engine
+Lightweight **durable Python state machine** (current state + immutable event log persisted to
+Postgres; state is recoverable by replaying the log after a crash), **Saga/compensating
+transactions** (roll a running instance back through its executed steps), **JSON blueprints**
+rendered visually as a left-to-right flow graph, **observer pattern → mock Slack** notifications
+on every state transition.
+- Tables: `workflow_definitions` (JSON blueprint), `workflow_instances`, `workflow_events`.
+- Pure, tested engine in `services/workflow_engine.py`; persistence/notifications layered in
+  `services/workflow_runtime.py` + `services/notifications.py`.
+- API: list/get definitions, list/create/get instances, `advance`, `compensate`, `notifications`.
+- UI: Workflows list (launch runs), Workflow detail (blueprint graph, action buttons, Saga
+  rollback, event log); demo fallback for previews.
 
 ## ⬜ Iteration 4 — Evidence & Continuous Compliance
 `evidence` + `implemented_controls` tables. **Pluggable cloud-evidence collector** interface with a

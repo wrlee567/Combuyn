@@ -5,6 +5,8 @@ import Coverage from "./pages/Coverage";
 import Vendors from "./pages/Vendors";
 import VendorDetail from "./pages/VendorDetail";
 import AddVendor from "./pages/AddVendor";
+import Workflows from "./pages/Workflows";
+import WorkflowDetail from "./pages/WorkflowDetail";
 
 export default function App() {
   return (
@@ -23,6 +25,8 @@ export default function App() {
           <div className="nav-group">Compliance</div>
           <NavLink to="/frameworks">Frameworks</NavLink>
           <NavLink to="/coverage">Control Coverage</NavLink>
+          <div className="nav-group">Automation</div>
+          <NavLink to="/workflows">Workflows</NavLink>
         </nav>
       </aside>
       <main className="main">
@@ -33,6 +37,8 @@ export default function App() {
           <Route path="/vendors" element={<Vendors />} />
           <Route path="/vendors/new" element={<AddVendor />} />
           <Route path="/vendors/:id" element={<VendorDetail />} />
+          <Route path="/workflows" element={<Workflows />} />
+          <Route path="/workflows/:id" element={<WorkflowDetail />} />
         </Routes>
       </main>
     </div>

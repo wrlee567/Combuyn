@@ -11,6 +11,11 @@ from app.models.ccf import (
     FrameworkRequirement,
 )
 from app.models.vendor import Vendor
+from app.models.workflow import (
+    WorkflowDefinition,
+    WorkflowEvent,
+    WorkflowInstance,
+)
 
 __all__ = [
     "Framework",
@@ -18,4 +23,7 @@ __all__ = [
     "CommonControl",
     "ControlRequirementMapping",
     "Vendor",
+    "WorkflowDefinition",
+    "WorkflowInstance",
+    "WorkflowEvent",
 ]

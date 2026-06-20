@@ -164,3 +164,28 @@ th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: upp
 .notice { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; }
 .notice.error { background: #3a1f24; color: #ff8b9a; }
 .notice.success { background: #1f3a2e; color: #6ee7a8; }
+
+/* ---- Workflow Orchestration (Iteration 3) ---- */
+.btn.ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+.btn.ghost:hover { background: var(--panel-2); color: var(--text); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+
+.badge.wf-running { background: #1f2e3a; color: #7cb7ff; }
+.badge.wf-completed { background: #1f3a2e; color: #6ee7a8; }
+.badge.wf-compensated { background: #3a2a1f; color: #f0a874; }
+.badge.wf-evt-start { background: var(--panel-2); color: var(--muted); }
+.badge.wf-evt-transition { background: #1f2e3a; color: #7cb7ff; }
+.badge.wf-evt-complete { background: #1f3a2e; color: #6ee7a8; }
+.badge.wf-evt-compensation { background: #3a2a1f; color: #f0a874; }
+.badge.wf-evt-compensated { background: #3a1f24; color: #ff8b9a; }
+
+.wf-def-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+.wf-def-card { display: flex; flex-direction: column; gap: 8px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+
+.wf-graph { display: flex; gap: 28px; overflow-x: auto; padding: 8px 0; align-items: center; }
+.wf-col { display: flex; flex-direction: column; gap: 12px; min-width: 130px; }
+.wf-node { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; text-align: center; font-size: 13px; }
+.wf-node.active { border-color: var(--accent); background: #1f2e3a; color: #fff; box-shadow: 0 0 0 2px rgba(79, 140, 255, 0.3); }
+.wf-node.terminal { border-style: dashed; }
+
+.wf-actions { display: flex; flex-wrap: wrap; gap: 10px; }

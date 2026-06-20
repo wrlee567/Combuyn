@@ -9,10 +9,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.api import ccf, health, vendors
+from app.api import ccf, health, vendors, workflow
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
-from app.seed.seeder import seed_ccf, seed_vendors
+from app.seed.seeder import seed_ccf, seed_vendors, seed_workflows
 
 # Ensure models are registered on Base.metadata.
 import app.models  # noqa: F401  (side-effect import)
@@ -32,10 +32,13 @@ async def lifespan(app: FastAPI):
         with SessionLocal() as db:
             created = seed_ccf(db)
             vendors_created = seed_vendors(db)
+            workflows_created = seed_workflows(db)
         if any(created.values()):
             logger.info("Seeded CCF reference data: %s", created)
         if vendors_created:
             logger.info("Seeded sample vendors: %d", vendors_created)
+        if any(workflows_created.values()):
+            logger.info("Seeded workflows: %s", workflows_created)
     yield
 
 
@@ -57,6 +60,7 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(ccf.router)
 app.include_router(vendors.router)
+app.include_router(workflow.router)
 
 
 @app.get("/", tags=["health"])

@@ -12,9 +12,13 @@ from app.models.ccf import (
     FrameworkRequirement,
 )
 from app.models.vendor import Vendor
+from app.models.workflow import WorkflowDefinition, WorkflowInstance
 from app.seed.ccf_reference import COMMON_CONTROLS, FRAMEWORKS, REQUIREMENTS
 from app.seed.vendors_reference import SAMPLE_VENDORS
+from app.seed.workflow_reference import SAMPLE_INSTANCES, WORKFLOW_DEFINITIONS
+from app.services import workflow_runtime
 from app.services.risk_scoring import compute_inherent_risk
+from app.services.workflow_engine import validate_blueprint
 
 
 def seed_ccf(db: Session) -> dict[str, int]:
@@ -120,5 +124,53 @@ def seed_vendors(db: Session) -> int:
         vendor.risk_breakdown = result.breakdown
         db.add(vendor)
         created += 1
+    db.commit()
+    return created
+
+
+def seed_workflows(db: Session) -> dict[str, int]:
+    """Insert workflow definitions and drive sample instances through them.
+
+    Idempotent: definitions are keyed by ``key`` and instances by ``subject``.
+    Sample instances are advanced via the real engine (notifications suppressed)
+    so their persisted state and event log always match the live rules.
+    Returns counts of rows created.
+    """
+    created = {"definitions": 0, "instances": 0}
+
+    def_by_key: dict[str, WorkflowDefinition] = {}
+    for data in WORKFLOW_DEFINITIONS:
+        validate_blueprint(data["blueprint"])
+        definition = db.scalar(
+            select(WorkflowDefinition).where(WorkflowDefinition.key == data["key"])
+        )
+        if definition is None:
+            definition = WorkflowDefinition(
+                key=data["key"],
+                name=data["name"],
+                description=data["description"],
+                blueprint=data["blueprint"],
+            )
+            db.add(definition)
+            db.flush()
+            created["definitions"] += 1
+        def_by_key[definition.key] = definition
+
+    for sample in SAMPLE_INSTANCES:
+        exists = db.scalar(
+            select(WorkflowInstance).where(
+                WorkflowInstance.subject == sample["subject"]
+            )
+        )
+        if exists is not None:
+            continue
+        definition = def_by_key[sample["definition_key"]]
+        instance = workflow_runtime.start_instance(
+            db, definition, sample["subject"], sample.get("context", {})
+        )
+        for action in sample.get("actions", []):
+            workflow_runtime.advance_instance(db, instance, action)
+        created["instances"] += 1
+
     db.commit()
     return created
