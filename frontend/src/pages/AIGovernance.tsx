@@ -1,4 +1,4 @@
-import { api, type ISO42001Control } from "../api";
+import { api, type AIGovernanceReview, type ISO42001Control } from "../api";
 import { badgeClass } from "../badge";
 import { useApi } from "../useApi";
 
@@ -9,6 +9,7 @@ export default function AIGovernance() {
   const tasks = useApi(api.aiTasks);
   const guardrails = useApi(api.aiGuardrails);
   const impacts = useApi(api.aiImpactAssessments);
+  const reviews = useApi(api.aiReviews);
   const medical = useApi(api.medicalAIRisks);
   const vendors = useApi(api.aiVendors);
 
@@ -19,6 +20,7 @@ export default function AIGovernance() {
     tasks.loading ||
     guardrails.loading ||
     impacts.loading ||
+    reviews.loading ||
     medical.loading ||
     vendors.loading
   ) {
@@ -45,6 +47,8 @@ export default function AIGovernance() {
         <Stat value={s.gpai_systems} label="GPAI Models" />
         <Stat value={s.open_tasks} label="Open AI Tasks" />
         <Stat value={s.passing_guardrails} label="Passing Guardrails" />
+        <Stat value={s.missing_evidence} label="Missing Evidence" />
+        <Stat value={s.overdue_reviews} label="Overdue Reviews" />
       </div>
 
       <div className="panel">
@@ -87,6 +91,23 @@ export default function AIGovernance() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="panel">
+        <div className="panel-heading">
+          <div>
+            <h2>AI Risk and Evidence Register</h2>
+            <p className="panel-subtitle">
+              Approval status, review cadence, and evidence readiness for governed AI systems.
+            </p>
+          </div>
+          <span className="badge generic">{s.evidence_items} evidence items</span>
+        </div>
+        <div className="review-grid">
+          {(reviews.data ?? []).map((review) => (
+            <ReviewCard key={review.id} review={review} />
+          ))}
+        </div>
       </div>
 
       <div className="split">
@@ -255,6 +276,71 @@ function compactValue(value: Record<string, unknown>) {
     .slice(0, 2)
     .map(String)
     .join(", ");
+}
+
+function ReviewCard({ review }: { review: AIGovernanceReview }) {
+  const totalEvidence = review.evidence_items.length || 1;
+  const readyPercent = Math.round((review.evidence_ready / totalEvidence) * 100);
+  const overdue =
+    review.next_review_date !== null &&
+    new Date(`${review.next_review_date}T00:00:00`) < new Date();
+
+  return (
+    <div className="review-card">
+      <div className="review-card-header">
+        <div>
+          <div className="control-key">{review.system_name}</div>
+          <h3>{review.review_name}</h3>
+        </div>
+        <span className={riskBadge(review.risk_level)}>{review.risk_level}</span>
+      </div>
+      <div className="review-meta">
+        <span className={badgeClass(review.status)}>{review.status}</span>
+        <span className={overdue ? "badge amber" : "badge generic"}>
+          {review.next_review_date ? formatDate(review.next_review_date) : "unscheduled"}
+        </span>
+        <span className="badge generic">{review.reviewer}</span>
+      </div>
+      <p>{review.decision_summary}</p>
+      <div className="evidence-progress">
+        <div>
+          <strong>{review.evidence_ready}</strong> ready
+        </div>
+        <div>
+          <strong>{review.evidence_missing}</strong> missing
+        </div>
+      </div>
+      <div className="progress-bar evidence-bar">
+        <div style={{ width: `${readyPercent}%` }} />
+      </div>
+      <div className="evidence-list">
+        {review.evidence_items.map((item) => (
+          <div className="evidence-row" key={item.id}>
+            <div>
+              <div>{item.requirement}</div>
+              <div className="domain">{item.title}</div>
+            </div>
+            <span className={evidenceBadge(item.status)}>{item.status}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function evidenceBadge(status: string) {
+  if (status === "accepted") return "badge green";
+  if (status === "provided") return "badge nist";
+  if (status === "missing") return "badge amber";
+  return "badge generic";
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(`${value}T00:00:00`));
 }
 
 function Stat({ value, label }: { value: number; label: string }) {

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ORMModel(BaseModel):
@@ -19,6 +20,9 @@ class AIInventorySummary(BaseModel):
     open_tasks: int
     passing_guardrails: int
     trust_center_frameworks: int
+    evidence_items: int = 0
+    missing_evidence: int = 0
+    overdue_reviews: int = 0
 
 
 class ISO42001ControlOut(ORMModel):
@@ -104,6 +108,33 @@ class AIImpactAssessmentOut(ORMModel):
     residual_risk: str
     approval_status: str
     system_name: str = ""
+
+
+class AIEvidenceItemOut(ORMModel):
+    id: uuid.UUID
+    requirement: str
+    evidence_type: str
+    title: str
+    evidence_uri: str
+    owner: str
+    status: str
+    notes: str
+
+
+class AIGovernanceReviewOut(ORMModel):
+    id: uuid.UUID
+    ai_system_id: uuid.UUID
+    system_name: str = ""
+    review_name: str
+    review_type: str
+    status: str
+    risk_level: str
+    reviewer: str
+    decision_summary: str
+    next_review_date: date | None
+    evidence_ready: int = 0
+    evidence_missing: int = 0
+    evidence_items: list[AIEvidenceItemOut] = Field(default_factory=list)
 
 
 class MedicalAIRiskOut(ORMModel):

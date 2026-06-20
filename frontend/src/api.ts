@@ -4,6 +4,7 @@
 
 import {
   demoAIGovernanceSummary,
+  demoAIReviews,
   demoAISystems,
   demoCoverage,
   demoFrameworks,
@@ -63,6 +64,9 @@ export interface AIGovernanceSummary {
   open_tasks: number;
   passing_guardrails: number;
   trust_center_frameworks: number;
+  evidence_items: number;
+  missing_evidence: number;
+  overdue_reviews: number;
 }
 
 export interface AIClassification {
@@ -148,6 +152,33 @@ export interface AIImpactAssessment {
   training_data_protections: string;
   residual_risk: string;
   approval_status: string;
+}
+
+export interface AIEvidenceItem {
+  id: string;
+  requirement: string;
+  evidence_type: string;
+  title: string;
+  evidence_uri: string;
+  owner: string;
+  status: string;
+  notes: string;
+}
+
+export interface AIGovernanceReview {
+  id: string;
+  ai_system_id: string;
+  system_name: string;
+  review_name: string;
+  review_type: string;
+  status: string;
+  risk_level: string;
+  reviewer: string;
+  decision_summary: string;
+  next_review_date: string | null;
+  evidence_ready: number;
+  evidence_missing: number;
+  evidence_items: AIEvidenceItem[];
 }
 
 export interface MedicalAIRisk {
@@ -251,6 +282,11 @@ export const api = {
     getOrDemo<AIImpactAssessment[]>(
       "/api/ai-governance/impact-assessments",
       demoImpactAssessments,
+    ),
+  aiReviews: () =>
+    getOrDemo<AIGovernanceReview[]>(
+      "/api/ai-governance/reviews",
+      demoAIReviews,
     ),
   medicalAIRisks: () =>
     getOrDemo<MedicalAIRisk[]>(

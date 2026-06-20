@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
@@ -10,6 +12,8 @@ from app.database import get_db
 from app.models.ai_governance import (
     AIComplianceTask,
     AIDataPrivacyGuardrail,
+    AIEvidenceItem,
+    AIGovernanceReview,
     AIImpactAssessment,
     AIInfrastructureValidationCheck,
     AIRiskClassification,
@@ -26,6 +30,8 @@ from app.schemas.ai_governance import (
     AIClassificationOut,
     AIClassificationRequest,
     AIComplianceTaskOut,
+    AIEvidenceItemOut,
+    AIGovernanceReviewOut,
     AIImpactAssessmentOut,
     AIInventorySummary,
     AISystemOut,
@@ -77,6 +83,9 @@ def summary(db: Session = Depends(get_db)) -> AIInventorySummary:
             AIInfrastructureValidationCheck.validation_status == "passing"
         )
     ) or 0
+    missing_evidence = db.scalar(
+        select(func.count(AIEvidenceItem.id)).where(AIEvidenceItem.status == "missing")
+    ) or 0
     return AIInventorySummary(
         ai_systems=db.scalar(select(func.count(AISystemInventory.id))) or 0,
         iso42001_controls=db.scalar(select(func.count(ISO42001AnnexAControl.id))) or 0,
@@ -89,6 +98,15 @@ def summary(db: Session = Depends(get_db)) -> AIInventorySummary:
         passing_guardrails=passing_privacy + passing_infra,
         trust_center_frameworks=db.scalar(
             select(func.count(TrustCenterFrameworkStatus.id))
+        )
+        or 0,
+        evidence_items=db.scalar(select(func.count(AIEvidenceItem.id))) or 0,
+        missing_evidence=missing_evidence,
+        overdue_reviews=db.scalar(
+            select(func.count(AIGovernanceReview.id)).where(
+                AIGovernanceReview.next_review_date < date.today(),
+                AIGovernanceReview.status != "retired",
+            )
         )
         or 0,
     )
@@ -237,6 +255,35 @@ def list_impact_assessments(
         )
         for assessment, system_name in db.execute(stmt)
     ]
+
+
+@router.get("/reviews", response_model=list[AIGovernanceReviewOut])
+def list_governance_reviews(db: Session = Depends(get_db)) -> list[AIGovernanceReviewOut]:
+    stmt = (
+        select(AIGovernanceReview, AISystemInventory.name)
+        .join(AISystemInventory, AISystemInventory.id == AIGovernanceReview.ai_system_id)
+        .options(selectinload(AIGovernanceReview.evidence_items))
+        .order_by(AIGovernanceReview.next_review_date, AISystemInventory.name)
+    )
+    reviews: list[AIGovernanceReviewOut] = []
+    for review, system_name in db.execute(stmt):
+        evidence = [
+            AIEvidenceItemOut.model_validate(item)
+            for item in sorted(review.evidence_items, key=lambda item: item.requirement)
+        ]
+        ready = sum(1 for item in evidence if item.status in {"accepted", "provided"})
+        missing = sum(1 for item in evidence if item.status == "missing")
+        reviews.append(
+            AIGovernanceReviewOut.model_validate(review).model_copy(
+                update={
+                    "system_name": system_name,
+                    "evidence_items": evidence,
+                    "evidence_ready": ready,
+                    "evidence_missing": missing,
+                }
+            )
+        )
+    return reviews
 
 
 @router.get("/medical-risk", response_model=list[MedicalAIRiskOut])

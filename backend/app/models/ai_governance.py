@@ -9,10 +9,11 @@ Trust Center transparency artifacts.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     Boolean,
+    Date,
     DateTime,
     ForeignKey,
     Integer,
@@ -318,6 +319,52 @@ class AIImpactAssessment(Base, TimestampMixin):
     approval_status: Mapped[str] = mapped_column(String(64), default="draft")
 
     ai_system: Mapped[AISystemInventory] = relationship(back_populates="impact_assessments")
+
+
+class AIGovernanceReview(Base, TimestampMixin):
+    """Approval register entry for an AI system governance review."""
+
+    __tablename__ = "ai_governance_reviews"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    org_id: Mapped[uuid.UUID] = mapped_column(Uuid, default=DEFAULT_ORG_ID, index=True)
+    ai_system_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("ai_system_inventory.id", ondelete="CASCADE"), index=True
+    )
+    review_name: Mapped[str] = mapped_column(String(255))
+    review_type: Mapped[str] = mapped_column(String(128), default="pre-deployment")
+    status: Mapped[str] = mapped_column(String(64), default="draft")
+    risk_level: Mapped[str] = mapped_column(String(64), default="medium")
+    reviewer: Mapped[str] = mapped_column(String(255), default="")
+    decision_summary: Mapped[str] = mapped_column(Text, default="")
+    next_review_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    ai_system: Mapped[AISystemInventory] = relationship()
+    evidence_items: Mapped[list["AIEvidenceItem"]] = relationship(
+        back_populates="review",
+        cascade="all, delete-orphan",
+    )
+
+
+class AIEvidenceItem(Base, TimestampMixin):
+    """Evidence item tied to an AI governance review requirement."""
+
+    __tablename__ = "ai_evidence_items"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    org_id: Mapped[uuid.UUID] = mapped_column(Uuid, default=DEFAULT_ORG_ID, index=True)
+    review_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("ai_governance_reviews.id", ondelete="CASCADE"), index=True
+    )
+    requirement: Mapped[str] = mapped_column(String(255))
+    evidence_type: Mapped[str] = mapped_column(String(128), default="document")
+    title: Mapped[str] = mapped_column(String(255))
+    evidence_uri: Mapped[str] = mapped_column(String(512), default="")
+    owner: Mapped[str] = mapped_column(String(255), default="")
+    status: Mapped[str] = mapped_column(String(64), default="missing")
+    notes: Mapped[str] = mapped_column(Text, default="")
+
+    review: Mapped[AIGovernanceReview] = relationship(back_populates="evidence_items")
 
 
 class MedicalAIAlgorithmicRiskAssessment(Base, TimestampMixin):

@@ -30,6 +30,9 @@ def test_ai_governance_summary_counts(client):
     assert summary["high_risk_systems"] == 1
     assert summary["gpai_systems"] == 1
     assert summary["open_tasks"] >= 1
+    assert summary["evidence_items"] == 12
+    assert summary["missing_evidence"] >= 1
+    assert summary["overdue_reviews"] == 1
 
 
 def test_seeded_systems_have_expected_classification_tiers(client):
@@ -78,6 +81,25 @@ def test_guardrails_and_medical_risk_are_exposed(client):
     assert "training" in medical[0]["training_validation_test_split_risk"].lower()
     assert "causally" in medical[0]["explainable_ai_evaluation"].lower()
     assert "feedback loops" in medical[0]["performative_prediction_risk"].lower()
+
+
+def test_governance_reviews_expose_evidence_register(client):
+    reviews = client.get("/api/ai-governance/reviews").json()
+    assert len(reviews) == 3
+    assert all(len(review["evidence_items"]) == 4 for review in reviews)
+    assert any(review["status"] == "approved with conditions" for review in reviews)
+    assert any(review["evidence_missing"] > 0 for review in reviews)
+
+    medical = next(
+        review
+        for review in reviews
+        if review["system_name"] == "Medical Triage Risk Scorer"
+    )
+    assert medical["risk_level"] == "high"
+    assert any(
+        item["requirement"] == "Data governance" and item["status"] == "missing"
+        for item in medical["evidence_items"]
+    )
 
 
 def test_public_trust_center(client):

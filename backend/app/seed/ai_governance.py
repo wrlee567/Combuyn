@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.ai_governance import (
     AIComplianceTask,
     AIDataPrivacyGuardrail,
+    AIEvidenceItem,
+    AIGovernanceReview,
     AIImpactAssessment,
     AIInfrastructureValidationCheck,
     AIRiskClassification,
@@ -41,6 +45,8 @@ def seed_ai_governance(db: Session) -> dict[str, int]:
         "classifications": 0,
         "tasks": 0,
         "guardrails": 0,
+        "governance_reviews": 0,
+        "evidence_items": 0,
         "impact_assessments": 0,
         "medical_risks": 0,
         "vendors": 0,
@@ -258,6 +264,97 @@ def seed_ai_governance(db: Session) -> dict[str, int]:
                 )
             )
             created["impact_assessments"] += 1
+
+        review = db.scalar(
+            select(AIGovernanceReview).where(
+                AIGovernanceReview.ai_system_id == system.id,
+                AIGovernanceReview.review_type == "deployment readiness",
+            )
+        )
+        if review is None:
+            if system.medical_device_related:
+                status = "under review"
+                risk_level = "high"
+                next_review = date.today() + timedelta(days=14)
+                decision = "Clinical validation, SOUP supplier evidence, and human oversight records are required before production approval."
+            elif system.lifecycle_stage == "deployed":
+                status = "approved with conditions"
+                risk_level = "medium"
+                next_review = date.today() - timedelta(days=10)
+                decision = "Approved for private endpoint use with quarterly evidence refresh and provider documentation review."
+            else:
+                status = "pending evidence"
+                risk_level = "medium"
+                next_review = date.today() + timedelta(days=30)
+                decision = "Transparency notice and evaluation record must be accepted before general availability."
+
+            review = AIGovernanceReview(
+                ai_system_id=system.id,
+                review_name=f"{system.name} deployment readiness",
+                review_type="deployment readiness",
+                status=status,
+                risk_level=risk_level,
+                reviewer="AI Governance Council",
+                decision_summary=decision,
+                next_review_date=next_review,
+            )
+            db.add(review)
+            db.flush()
+            created["governance_reviews"] += 1
+
+        evidence_templates = [
+            (
+                "Risk assessment",
+                "assessment",
+                f"{system.name} impact and risk assessment",
+                "accepted",
+                "Control owner reviewed residual risk and mitigation plan.",
+            ),
+            (
+                "Data governance",
+                "attestation",
+                f"{system.name} data provenance and training exclusion",
+                "provided" if not system.medical_device_related else "missing",
+                "Data source, retention, and training boundary evidence.",
+            ),
+            (
+                "Human oversight",
+                "procedure",
+                f"{system.name} human oversight procedure",
+                "provided" if system.lifecycle_stage == "deployed" else "missing",
+                "Reviewer roles, override path, and escalation workflow.",
+            ),
+            (
+                "Transparency notice",
+                "notice",
+                f"{system.name} user and customer notice",
+                "accepted" if system.lifecycle_stage == "deployed" else "missing",
+                "EU AI Act notice and customer-facing disclosure package.",
+            ),
+        ]
+        for requirement, evidence_type, title, status, notes in evidence_templates:
+            exists = db.scalar(
+                select(AIEvidenceItem).where(
+                    AIEvidenceItem.review_id == review.id,
+                    AIEvidenceItem.requirement == requirement,
+                )
+            )
+            if exists is None:
+                db.add(
+                    AIEvidenceItem(
+                        review_id=review.id,
+                        requirement=requirement,
+                        evidence_type=evidence_type,
+                        title=title,
+                        evidence_uri=""
+                        if status == "missing"
+                        else f"trust://ai-evidence/{system.name.lower().replace(' ', '-')}/{requirement.lower().replace(' ', '-')}",
+                        owner=system.owner,
+                        status=status,
+                        notes=notes,
+                    )
+                )
+                created["evidence_items"] += 1
 
         if system.medical_device_related and not db.scalar(
             select(MedicalAIAlgorithmicRiskAssessment).where(
