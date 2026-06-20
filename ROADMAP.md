@@ -5,7 +5,7 @@ DB → API → UI path you can click through and demo. The medical device subsys
 **segregated** (its own schema namespace + module) from Iteration 1 onward.
 
 > Source of truth for *what* to build: the architectural blueprint (`Combuyn_App.docx`).
-> This roadmap reorders the blueprint's 7 horizontal phases into shippable increments.
+> This roadmap reorders selected blueprint phases into shippable increments.
 
 ## Status legend
 - ✅ done · 🚧 in progress · ⬜ planned
@@ -46,16 +46,7 @@ Saga/compensating transactions, **JSON blueprints** rendered visually with React
 **mock provider as default** (no AWS required). Findings map back to CCF controls and flip
 compliance status in real time. Real providers (incl. Render/Vercel/GitHub APIs) drop in later.
 
-## ⬜ Iteration 5 — STRIDE Threat Modeling
-`threat_register` table, STRIDE calculator UI, threats linked to mitigating CCF controls,
-trust-boundary / third-party API abuse analysis.
-
-## ⬜ Iteration 6 — Medical Device Subsystem (segregated)
-MDSAP / ISO 13485 / IEC 62304 / MDR / HDS. ISO 13485 ↔ MDSAP gap assessment, medical TPRM
-questionnaires, **SOUP tracking** (CVEs, IEC 62304 risk level) + **FMEA** mandatory re-eval
-workflow that blocks high-risk SOUP updates.
-
-## ⬜ Iteration 7 — BI Dashboards & ROI
+## ⬜ Iteration 5 — BI Dashboards & ROI
 Single-pane compliance posture across all frameworks, **ROI calculator** (admin hours saved),
 visual **workflow execution monitor** highlighting failed nodes.
 

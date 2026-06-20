@@ -78,3 +78,28 @@ def seed_again(session):
     from app.seed.seeder import seed_ccf
 
     return seed_ccf(session)
+
+
+def test_list_controls(client):
+    controls = client.get("/api/controls").json()
+    assert isinstance(controls, list)
+    assert len(controls) > 0
+    assert all(c["key"].startswith("CCF-") for c in controls)
+
+
+def test_list_controls_structure(client):
+    for c in client.get("/api/controls").json():
+        assert "key" in c
+        assert "name" in c
+        assert "description" in c
+
+
+def test_framework_requirements_404(client):
+    resp = client.get("/api/frameworks/00000000-0000-0000-0000-000000000099/requirements")
+    assert resp.status_code == 404
+
+
+def test_filter_frameworks_returns_empty(client):
+    resp = client.get("/api/frameworks", params={"category": "nonexistent"})
+    assert resp.status_code == 200
+    assert resp.json() == []
