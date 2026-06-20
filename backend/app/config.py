@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     # MUST stay false in production — these are illustrative, not real data.
     seed_demo_data: bool = False
 
+    # JWT bearer auth. Tokens carry an ``org_id`` claim used for tenant scoping.
+    # MUST be overridden with a strong secret in production.
+    jwt_secret: str = "dev-insecure-secret-change-me"
+    jwt_algorithm: str = "HS256"
+
     # Create tables via Base.metadata.create_all on startup. Convenient for
     # local/test, but production should run Alembic migrations instead. When
     # unset, defaults to on outside production.

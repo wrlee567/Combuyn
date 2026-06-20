@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.auth import current_org
 from app.database import get_db
 from app.models.vendor import LIFECYCLE_PHASES, Vendor
 from app.schemas.vendor import (
@@ -32,7 +33,19 @@ from app.services.risk_scoring import (
     factor_options,
 )
 
-router = APIRouter(prefix="/api/vendors", tags=["vendors"])
+router = APIRouter(
+    prefix="/api/vendors", tags=["vendors"], dependencies=[Depends(current_org)]
+)
+
+
+def _get_owned_vendor(vendor_id: uuid.UUID, org_id: uuid.UUID, db: Session) -> Vendor:
+    """Fetch a vendor scoped to the caller's tenant, or 404."""
+    vendor = db.scalar(
+        select(Vendor).where(Vendor.id == vendor_id, Vendor.org_id == org_id)
+    )
+    if vendor is None:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+    return vendor
 
 
 def _apply_inherent_risk(vendor: Vendor) -> None:
@@ -65,19 +78,29 @@ def questionnaire_template() -> dict:
 
 
 @router.get("", response_model=list[VendorSummary])
-def list_vendors(db: Session = Depends(get_db)) -> list[VendorSummary]:
-    stmt = select(Vendor).order_by(Vendor.inherent_risk_score.desc(), Vendor.name)
+def list_vendors(
+    db: Session = Depends(get_db), org_id: uuid.UUID = Depends(current_org)
+) -> list[VendorSummary]:
+    stmt = (
+        select(Vendor)
+        .where(Vendor.org_id == org_id)
+        .order_by(Vendor.inherent_risk_score.desc(), Vendor.name)
+    )
     return [VendorSummary.model_validate(v) for v in db.scalars(stmt)]
 
 
 @router.post("", response_model=VendorDetail, status_code=201)
-def create_vendor(payload: VendorCreate, db: Session = Depends(get_db)) -> VendorDetail:
+def create_vendor(
+    payload: VendorCreate,
+    db: Session = Depends(get_db),
+    org_id: uuid.UUID = Depends(current_org),
+) -> VendorDetail:
     if payload.lifecycle_status not in LIFECYCLE_PHASES:
         raise HTTPException(
             status_code=422,
             detail=f"Invalid lifecycle_status. Allowed: {', '.join(LIFECYCLE_PHASES)}.",
         )
-    vendor = Vendor(**payload.model_dump())
+    vendor = Vendor(**payload.model_dump(), org_id=org_id)
     _apply_inherent_risk(vendor)
     db.add(vendor)
     db.commit()
@@ -86,11 +109,12 @@ def create_vendor(payload: VendorCreate, db: Session = Depends(get_db)) -> Vendo
 
 
 @router.get("/{vendor_id}", response_model=VendorDetail)
-def get_vendor(vendor_id: uuid.UUID, db: Session = Depends(get_db)) -> VendorDetail:
-    vendor = db.get(Vendor, vendor_id)
-    if vendor is None:
-        raise HTTPException(status_code=404, detail="Vendor not found")
-    return VendorDetail.model_validate(vendor)
+def get_vendor(
+    vendor_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    org_id: uuid.UUID = Depends(current_org),
+) -> VendorDetail:
+    return VendorDetail.model_validate(_get_owned_vendor(vendor_id, org_id, db))
 
 
 @router.patch("/{vendor_id}/questionnaire", response_model=VendorDetail)
@@ -98,10 +122,9 @@ def update_questionnaire(
     vendor_id: uuid.UUID,
     payload: QuestionnaireUpdate,
     db: Session = Depends(get_db),
+    org_id: uuid.UUID = Depends(current_org),
 ) -> VendorDetail:
-    vendor = db.get(Vendor, vendor_id)
-    if vendor is None:
-        raise HTTPException(status_code=404, detail="Vendor not found")
+    vendor = _get_owned_vendor(vendor_id, org_id, db)
 
     errors = validate_responses(payload.responses)
     if errors:
@@ -120,15 +143,14 @@ def update_lifecycle(
     vendor_id: uuid.UUID,
     payload: LifecycleUpdate,
     db: Session = Depends(get_db),
+    org_id: uuid.UUID = Depends(current_org),
 ) -> VendorDetail:
     if payload.lifecycle_status not in LIFECYCLE_PHASES:
         raise HTTPException(
             status_code=422,
             detail=f"Invalid lifecycle_status. Allowed: {', '.join(LIFECYCLE_PHASES)}.",
         )
-    vendor = db.get(Vendor, vendor_id)
-    if vendor is None:
-        raise HTTPException(status_code=404, detail="Vendor not found")
+    vendor = _get_owned_vendor(vendor_id, org_id, db)
     vendor.lifecycle_status = payload.lifecycle_status
     db.commit()
     db.refresh(vendor)

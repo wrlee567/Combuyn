@@ -23,6 +23,9 @@ services:
         value: "false"
       - key: ENVIRONMENT
         value: production
+      # Signing secret for JWT bearer auth — generated once by Render.
+      - key: JWT_SECRET
+        generateValue: true
       # Set this to your Vercel frontend origin after the first deploy.
       - key: CORS_ORIGINS
         sync: false

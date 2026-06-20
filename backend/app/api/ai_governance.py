@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.auth import current_org
 from app.database import get_db
+from app.models.ccf import DEFAULT_ORG_ID
 from app.models.ai_governance import (
     AIComplianceTask,
     AIDataPrivacyGuardrail,
@@ -51,7 +54,12 @@ from app.services.ai_governance import (
     compliance_tasks_for,
 )
 
-router = APIRouter(prefix="/api/ai-governance", tags=["ai-governance"])
+router = APIRouter(
+    prefix="/api/ai-governance",
+    tags=["ai-governance"],
+    dependencies=[Depends(current_org)],
+)
+# Public, unauthenticated: shows the platform's own (default-org) posture.
 trust_router = APIRouter(prefix="/api/trust-center", tags=["trust-center"])
 
 
@@ -62,48 +70,76 @@ def _latest_classification(system: AISystemInventory) -> AIRiskClassification | 
 
 
 @router.get("/summary", response_model=AIInventorySummary)
-def summary(db: Session = Depends(get_db)) -> AIInventorySummary:
+def summary(
+    db: Session = Depends(get_db), org_id: uuid.UUID = Depends(current_org)
+) -> AIInventorySummary:
     high_risk = db.scalar(
         select(func.count(AIRiskClassification.id)).where(
-            AIRiskClassification.risk_tier == "High-Risk Systems"
+            AIRiskClassification.org_id == org_id,
+            AIRiskClassification.risk_tier == "High-Risk Systems",
         )
     ) or 0
     gpai = db.scalar(
         select(func.count(AIRiskClassification.id)).where(
-            AIRiskClassification.risk_tier == "General Purpose AI (GPAI) Models"
+            AIRiskClassification.org_id == org_id,
+            AIRiskClassification.risk_tier == "General Purpose AI (GPAI) Models",
         )
     ) or 0
     passing_privacy = db.scalar(
         select(func.count(AIDataPrivacyGuardrail.id)).where(
-            AIDataPrivacyGuardrail.status == "passing"
+            AIDataPrivacyGuardrail.org_id == org_id,
+            AIDataPrivacyGuardrail.status == "passing",
         )
     ) or 0
     passing_infra = db.scalar(
         select(func.count(AIInfrastructureValidationCheck.id)).where(
-            AIInfrastructureValidationCheck.validation_status == "passing"
+            AIInfrastructureValidationCheck.org_id == org_id,
+            AIInfrastructureValidationCheck.validation_status == "passing",
         )
     ) or 0
     missing_evidence = db.scalar(
-        select(func.count(AIEvidenceItem.id)).where(AIEvidenceItem.status == "missing")
+        select(func.count(AIEvidenceItem.id)).where(
+            AIEvidenceItem.org_id == org_id, AIEvidenceItem.status == "missing"
+        )
     ) or 0
     return AIInventorySummary(
-        ai_systems=db.scalar(select(func.count(AISystemInventory.id))) or 0,
-        iso42001_controls=db.scalar(select(func.count(ISO42001AnnexAControl.id))) or 0,
+        ai_systems=db.scalar(
+            select(func.count(AISystemInventory.id)).where(
+                AISystemInventory.org_id == org_id
+            )
+        )
+        or 0,
+        iso42001_controls=db.scalar(
+            select(func.count(ISO42001AnnexAControl.id)).where(
+                ISO42001AnnexAControl.org_id == org_id
+            )
+        )
+        or 0,
         high_risk_systems=high_risk,
         gpai_systems=gpai,
         open_tasks=db.scalar(
-            select(func.count(AIComplianceTask.id)).where(AIComplianceTask.status == "open")
+            select(func.count(AIComplianceTask.id)).where(
+                AIComplianceTask.org_id == org_id, AIComplianceTask.status == "open"
+            )
         )
         or 0,
         passing_guardrails=passing_privacy + passing_infra,
         trust_center_frameworks=db.scalar(
-            select(func.count(TrustCenterFrameworkStatus.id))
+            select(func.count(TrustCenterFrameworkStatus.id)).where(
+                TrustCenterFrameworkStatus.org_id == org_id
+            )
         )
         or 0,
-        evidence_items=db.scalar(select(func.count(AIEvidenceItem.id))) or 0,
+        evidence_items=db.scalar(
+            select(func.count(AIEvidenceItem.id)).where(
+                AIEvidenceItem.org_id == org_id
+            )
+        )
+        or 0,
         missing_evidence=missing_evidence,
         overdue_reviews=db.scalar(
             select(func.count(AIGovernanceReview.id)).where(
+                AIGovernanceReview.org_id == org_id,
                 AIGovernanceReview.next_review_date < date.today(),
                 AIGovernanceReview.status != "retired",
             )
@@ -113,9 +149,12 @@ def summary(db: Session = Depends(get_db)) -> AIInventorySummary:
 
 
 @router.get("/systems", response_model=list[AISystemOut])
-def list_systems(db: Session = Depends(get_db)) -> list[AISystemOut]:
+def list_systems(
+    db: Session = Depends(get_db), org_id: uuid.UUID = Depends(current_org)
+) -> list[AISystemOut]:
     stmt = (
         select(AISystemInventory)
+        .where(AISystemInventory.org_id == org_id)
         .options(selectinload(AISystemInventory.classifications))
         .order_by(AISystemInventory.name)
     )
@@ -131,9 +170,12 @@ def list_systems(db: Session = Depends(get_db)) -> list[AISystemOut]:
 
 
 @router.get("/iso42001/controls", response_model=list[ISO42001ControlOut])
-def list_iso42001_controls(db: Session = Depends(get_db)) -> list[ISO42001ControlOut]:
+def list_iso42001_controls(
+    db: Session = Depends(get_db), org_id: uuid.UUID = Depends(current_org)
+) -> list[ISO42001ControlOut]:
     stmt = (
         select(ISO42001AnnexAControl)
+        .where(ISO42001AnnexAControl.org_id == org_id)
         .options(selectinload(ISO42001AnnexAControl.objective))
         .order_by(ISO42001AnnexAControl.control_id)
     )
@@ -161,15 +203,23 @@ def classification_questionnaire() -> list[ClassificationQuestionOut]:
 
 @router.post("/classifications", response_model=AIClassificationOut)
 def classify_system(
-    payload: AIClassificationRequest, db: Session = Depends(get_db)
+    payload: AIClassificationRequest,
+    db: Session = Depends(get_db),
+    org_id: uuid.UUID = Depends(current_org),
 ) -> AIClassificationOut:
-    system = db.get(AISystemInventory, payload.ai_system_id)
+    system = db.scalar(
+        select(AISystemInventory).where(
+            AISystemInventory.id == payload.ai_system_id,
+            AISystemInventory.org_id == org_id,
+        )
+    )
     if system is None:
         raise HTTPException(status_code=404, detail="AI system not found")
 
     result = classify_eu_ai_act(payload.questionnaire_answers)
     classification = AIRiskClassification(
         ai_system_id=system.id,
+        org_id=org_id,
         actor_role=payload.actor_role,
         risk_tier=result.risk_tier,
         regulatory_scope=result.regulatory_scope,
@@ -183,6 +233,7 @@ def classify_system(
         db.add(
             AIComplianceTask(
                 ai_system_id=system.id,
+                org_id=org_id,
                 classification_id=classification.id,
                 **task_data,
             )
@@ -193,10 +244,13 @@ def classify_system(
 
 
 @router.get("/tasks", response_model=list[AIComplianceTaskOut])
-def list_tasks(db: Session = Depends(get_db)) -> list[AIComplianceTaskOut]:
+def list_tasks(
+    db: Session = Depends(get_db), org_id: uuid.UUID = Depends(current_org)
+) -> list[AIComplianceTaskOut]:
     stmt = (
         select(AIComplianceTask, AISystemInventory.name)
         .join(AISystemInventory, AISystemInventory.id == AIComplianceTask.ai_system_id)
+        .where(AIComplianceTask.org_id == org_id)
         .order_by(AIComplianceTask.created_at.desc())
     )
     return [
@@ -208,7 +262,9 @@ def list_tasks(db: Session = Depends(get_db)) -> list[AIComplianceTaskOut]:
 
 
 @router.get("/guardrails", response_model=list[GuardrailOut])
-def list_guardrails(db: Session = Depends(get_db)) -> list[GuardrailOut]:
+def list_guardrails(
+    db: Session = Depends(get_db), org_id: uuid.UUID = Depends(current_org)
+) -> list[GuardrailOut]:
     stmt = (
         select(AISystemInventory, AIDataPrivacyGuardrail, AIInfrastructureValidationCheck)
         .join(
@@ -219,6 +275,7 @@ def list_guardrails(db: Session = Depends(get_db)) -> list[GuardrailOut]:
             AIInfrastructureValidationCheck,
             AIInfrastructureValidationCheck.ai_system_id == AISystemInventory.id,
         )
+        .where(AISystemInventory.org_id == org_id)
         .order_by(AISystemInventory.name)
     )
     return [
@@ -243,10 +300,12 @@ def list_guardrails(db: Session = Depends(get_db)) -> list[GuardrailOut]:
 @router.get("/impact-assessments", response_model=list[AIImpactAssessmentOut])
 def list_impact_assessments(
     db: Session = Depends(get_db),
+    org_id: uuid.UUID = Depends(current_org),
 ) -> list[AIImpactAssessmentOut]:
     stmt = (
         select(AIImpactAssessment, AISystemInventory.name)
         .join(AISystemInventory, AISystemInventory.id == AIImpactAssessment.ai_system_id)
+        .where(AIImpactAssessment.org_id == org_id)
         .order_by(AISystemInventory.name)
     )
     return [
@@ -258,10 +317,13 @@ def list_impact_assessments(
 
 
 @router.get("/reviews", response_model=list[AIGovernanceReviewOut])
-def list_governance_reviews(db: Session = Depends(get_db)) -> list[AIGovernanceReviewOut]:
+def list_governance_reviews(
+    db: Session = Depends(get_db), org_id: uuid.UUID = Depends(current_org)
+) -> list[AIGovernanceReviewOut]:
     stmt = (
         select(AIGovernanceReview, AISystemInventory.name)
         .join(AISystemInventory, AISystemInventory.id == AIGovernanceReview.ai_system_id)
+        .where(AIGovernanceReview.org_id == org_id)
         .options(selectinload(AIGovernanceReview.evidence_items))
         .order_by(AIGovernanceReview.next_review_date, AISystemInventory.name)
     )
@@ -287,7 +349,9 @@ def list_governance_reviews(db: Session = Depends(get_db)) -> list[AIGovernanceR
 
 
 @router.get("/medical-risk", response_model=list[MedicalAIRiskOut])
-def list_medical_risk(db: Session = Depends(get_db)) -> list[MedicalAIRiskOut]:
+def list_medical_risk(
+    db: Session = Depends(get_db), org_id: uuid.UUID = Depends(current_org)
+) -> list[MedicalAIRiskOut]:
     stmt = (
         select(
             MedicalAIAlgorithmicRiskAssessment,
@@ -304,6 +368,7 @@ def list_medical_risk(db: Session = Depends(get_db)) -> list[MedicalAIRiskOut]:
             == MedicalAIAlgorithmicRiskAssessment.soup_component_id,
             isouter=True,
         )
+        .where(MedicalAIAlgorithmicRiskAssessment.org_id == org_id)
         .order_by(AISystemInventory.name)
     )
     return [
@@ -315,8 +380,14 @@ def list_medical_risk(db: Session = Depends(get_db)) -> list[MedicalAIRiskOut]:
 
 
 @router.get("/vendors", response_model=list[VendorProviderOut])
-def list_vendors(db: Session = Depends(get_db)) -> list[VendorProviderOut]:
-    stmt = select(AIVendorProvider).order_by(AIVendorProvider.name)
+def list_vendors(
+    db: Session = Depends(get_db), org_id: uuid.UUID = Depends(current_org)
+) -> list[VendorProviderOut]:
+    stmt = (
+        select(AIVendorProvider)
+        .where(AIVendorProvider.org_id == org_id)
+        .order_by(AIVendorProvider.name)
+    )
     return [VendorProviderOut.model_validate(v) for v in db.scalars(stmt)]
 
 
@@ -325,25 +396,25 @@ def public_trust_center(db: Session = Depends(get_db)) -> TrustCenterOut:
     frameworks = [
         TrustFrameworkOut.model_validate(f)
         for f in db.scalars(
-            select(TrustCenterFrameworkStatus).order_by(
-                TrustCenterFrameworkStatus.framework
-            )
+            select(TrustCenterFrameworkStatus)
+            .where(TrustCenterFrameworkStatus.org_id == DEFAULT_ORG_ID)
+            .order_by(TrustCenterFrameworkStatus.framework)
         )
     ]
     transparency = [
         TrustTransparencyOut.model_validate(t)
         for t in db.scalars(
-            select(TrustCenterAITransparencyMetric).order_by(
-                TrustCenterAITransparencyMetric.system_name
-            )
+            select(TrustCenterAITransparencyMetric)
+            .where(TrustCenterAITransparencyMetric.org_id == DEFAULT_ORG_ID)
+            .order_by(TrustCenterAITransparencyMetric.system_name)
         )
     ]
     documents = [
         TrustDocumentOut.model_validate(d)
         for d in db.scalars(
-            select(TrustCenterDocumentRequest).order_by(
-                TrustCenterDocumentRequest.document_name
-            )
+            select(TrustCenterDocumentRequest)
+            .where(TrustCenterDocumentRequest.org_id == DEFAULT_ORG_ID)
+            .order_by(TrustCenterDocumentRequest.document_name)
         )
     ]
     return TrustCenterOut(

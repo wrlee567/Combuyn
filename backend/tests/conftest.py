@@ -21,8 +21,12 @@ from sqlalchemy import create_engine  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
+import uuid  # noqa: E402
+
+from app.auth import create_access_token  # noqa: E402
 from app.database import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
+from app.models.ccf import DEFAULT_ORG_ID  # noqa: E402
 from app.seed.ai_governance import seed_ai_governance  # noqa: E402
 from app.seed.seeder import seed_ccf, seed_vendors  # noqa: E402
 
@@ -47,7 +51,7 @@ def db_session():
 
 
 @pytest.fixture()
-def client(db_session):
+def _test_client(db_session):
     def override_get_db():
         db = db_session()
         try:
@@ -59,3 +63,25 @@ def client(db_session):
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def client(_test_client):
+    """Authenticated client scoped to the seeded default tenant."""
+    token = create_access_token(DEFAULT_ORG_ID)
+    _test_client.headers["Authorization"] = f"Bearer {token}"
+    return _test_client
+
+
+@pytest.fixture()
+def anon_client(_test_client):
+    """Client with no bearer token — used to assert 401 on protected routes."""
+    return _test_client
+
+
+@pytest.fixture()
+def other_org_client(_test_client):
+    """Authenticated client for a different tenant (no seeded data)."""
+    token = create_access_token(uuid.uuid4())
+    _test_client.headers["Authorization"] = f"Bearer {token}"
+    return _test_client

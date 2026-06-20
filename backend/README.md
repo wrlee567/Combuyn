@@ -43,7 +43,18 @@ alembic revision --autogenerate -m "describe change"
 alembic upgrade head
 ```
 
+## Authentication & tenancy
+
+All `/api/*` routes (except the public `/api/trust-center`) require a JWT bearer
+token: `Authorization: Bearer <token>`. The token's `org_id` claim scopes every
+query to one tenant — a caller never sees another tenant's rows, and
+cross-tenant access to a specific resource returns 404. Tokens are signed with
+`JWT_SECRET` (HS256); `app.auth.create_access_token(org_id)` mints one. Health
+(`/health`, `/ready`) and the public trust center stay unauthenticated.
+
 ## Key endpoints
+
+All paths below require a bearer token unless marked public.
 
 | Method | Path | Purpose |
 |---|---|---|
