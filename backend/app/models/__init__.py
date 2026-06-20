@@ -11,6 +11,23 @@ from app.models.ccf import (
     FrameworkRequirement,
 )
 from app.models.vendor import Vendor
+from app.models.ai_governance import (
+    AIComplianceTask,
+    AIDataPrivacyGuardrail,
+    AIImpactAssessment,
+    AIInfrastructureValidationCheck,
+    AIRiskClassification,
+    AISystemInventory,
+    AISystemISOControlMapping,
+    AIVendorProvider,
+    ISO42001AnnexAControl,
+    ISO42001ControlObjective,
+    MedicalAIAlgorithmicRiskAssessment,
+    MedicalSOUPComponent,
+    TrustCenterAITransparencyMetric,
+    TrustCenterDocumentRequest,
+    TrustCenterFrameworkStatus,
+)
 
 __all__ = [
     "Framework",
@@ -18,4 +35,19 @@ __all__ = [
     "CommonControl",
     "ControlRequirementMapping",
     "Vendor",
+    "AIComplianceTask",
+    "AIDataPrivacyGuardrail",
+    "AIImpactAssessment",
+    "AIInfrastructureValidationCheck",
+    "AIRiskClassification",
+    "AISystemInventory",
+    "AISystemISOControlMapping",
+    "AIVendorProvider",
+    "ISO42001AnnexAControl",
+    "ISO42001ControlObjective",
+    "MedicalAIAlgorithmicRiskAssessment",
+    "MedicalSOUPComponent",
+    "TrustCenterAITransparencyMetric",
+    "TrustCenterDocumentRequest",
+    "TrustCenterFrameworkStatus",
 ]

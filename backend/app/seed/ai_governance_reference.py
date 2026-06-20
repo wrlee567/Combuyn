@@ -1,0 +1,177 @@
+"""Reference data for the AI Governance module."""
+
+from __future__ import annotations
+
+
+ISO42001_OBJECTIVES = [
+    ("A.2", "AI policy", "Policy controls governing accountable AI use."),
+    ("A.3", "Internal organization", "Roles, responsibilities, reporting, and oversight."),
+    ("A.4", "Resources", "People, tooling, environments, and external resources for AI."),
+    ("A.5", "Impact assessment", "Assessment and documentation of AI system impacts."),
+    ("A.6", "AI system lifecycle", "Controls across design, development, testing, deployment, operation, and retirement."),
+    ("A.7", "Data for AI systems", "Data provenance, quality, preparation, and protection controls."),
+    ("A.8", "Transparency", "Information, notices, reporting, and incident communication."),
+    ("A.9", "Use of AI systems", "Responsible and intended use of AI systems."),
+    ("A.10", "Third-party and customer relationships", "Supplier, customer, and shared-responsibility controls."),
+]
+
+
+ISO42001_CONTROLS = [
+    ("A.2", "A.2.1", "AI policy", "Maintain an approved AI policy aligned to organizational objectives."),
+    ("A.2", "A.2.2", "Policy alignment", "Align AI policy with security, privacy, legal, and quality policies."),
+    ("A.2", "A.2.3", "AI management objectives", "Define measurable AIMS objectives and governance outcomes."),
+    ("A.2", "A.2.4", "Policy communication and review", "Communicate and periodically review AI governance policy."),
+    ("A.3", "A.3.1", "AI roles and responsibilities", "Assign accountable owners for AI systems and controls."),
+    ("A.3", "A.3.2", "Reporting AI concerns", "Provide channels for reporting AI safety, ethics, and compliance concerns."),
+    ("A.3", "A.3.3", "Segregation of duties", "Separate duties for AI approval, development, validation, and deployment."),
+    ("A.3", "A.3.4", "Competence and awareness ownership", "Assign owners for AI competence, training, and awareness."),
+    ("A.4", "A.4.1", "AI resource inventory", "Inventory AI tools, models, datasets, environments, and dependencies."),
+    ("A.4", "A.4.2", "Tooling and environment controls", "Control AI development, test, and deployment environments."),
+    ("A.4", "A.4.3", "Human resources for AI", "Ensure qualified personnel support AI lifecycle activities."),
+    ("A.4", "A.4.4", "External AI resources", "Govern outsourced, vendor, and externally supplied AI resources."),
+    ("A.5", "A.5.1", "Impact assessment process", "Run AI impact assessments before material use or change."),
+    ("A.5", "A.5.2", "Individual and societal impacts", "Assess impacts to people, groups, rights, and safety."),
+    ("A.5", "A.5.3", "Impact assessment documentation", "Document scope, assumptions, harms, controls, and residual risk."),
+    ("A.5", "A.5.4", "Impact reassessment triggers", "Define reassessment triggers for model, data, context, or vendor change."),
+    ("A.6", "A.6.1", "AI system requirements", "Define intended purpose, requirements, constraints, and acceptance criteria."),
+    ("A.6", "A.6.2", "Design and development controls", "Control AI design and development decisions across the lifecycle."),
+    ("A.6", "A.6.3", "Verification and validation", "Validate performance, safety, robustness, bias, and misuse controls."),
+    ("A.6", "A.6.4", "Deployment approval", "Require documented approval before production deployment."),
+    ("A.6", "A.6.5", "Operation and monitoring", "Monitor AI system behavior, drift, incidents, and user feedback."),
+    ("A.6", "A.6.6", "Change and retirement", "Control AI changes, rollback, decommissioning, and retirement."),
+    ("A.6", "A.6.7", "Technical documentation", "Maintain technical files, model cards, data cards, and operating records."),
+    ("A.6", "A.6.8", "Event logs and traceability", "Record events needed for traceability, investigation, and audit."),
+    ("A.7", "A.7.1", "Data specification", "Define required data characteristics, limitations, and prohibited data uses."),
+    ("A.7", "A.7.2", "Data acquisition", "Control lawful, ethical, and contractually permitted data acquisition."),
+    ("A.7", "A.7.3", "Data quality", "Assess completeness, accuracy, representativeness, bias, and fitness for purpose."),
+    ("A.7", "A.7.4", "Data provenance", "Document lineage, sources, consent, licenses, and transformation history."),
+    ("A.7", "A.7.5", "Data preparation and protection", "Protect data through minimization, masking, access control, and retention."),
+    ("A.8", "A.8.1", "Information for users", "Provide user-facing documentation, instructions, and limitations."),
+    ("A.8", "A.8.2", "Transparency notices", "Disclose direct AI interaction, biometric use, and synthetic content where required."),
+    ("A.8", "A.8.3", "External reporting and incidents", "Report material AI incidents, malfunctions, or harms to required parties."),
+    ("A.9", "A.9.1", "Responsible use process", "Define rules for responsible deployment and use of AI systems."),
+    ("A.9", "A.9.2", "Intended use controls", "Prevent use outside approved purpose, population, context, and constraints."),
+    ("A.9", "A.9.3", "Human oversight and instructions", "Provide human oversight paths and operator instructions."),
+    ("A.10", "A.10.1", "Responsibility allocation", "Allocate responsibilities across providers, deployers, customers, and vendors."),
+    ("A.10", "A.10.2", "Supplier controls and SBOM", "Vet AI suppliers and collect SBOMs or equivalent supply-chain evidence."),
+    ("A.10", "A.10.3", "Customer relationship controls", "Document customer obligations, transparency duties, and shared controls."),
+]
+
+
+SAMPLE_AI_SYSTEMS = [
+    {
+        "name": "Vendor Risk Copilot",
+        "owner": "GRC Automation",
+        "business_purpose": "Assists analysts with third-party risk questionnaire review and evidence summarization.",
+        "source_type": "internal",
+        "provider_name": "Combuyn",
+        "model_type": "retrieval augmented LLM workflow",
+        "foundation_model_used": "private hosted foundation model",
+        "deployment_environment": "private VPC",
+        "lifecycle_stage": "testing",
+        "regulatory_role": "Provider",
+        "eu_market": True,
+        "medical_device_related": False,
+        "customer_data_training_policy": "blocked by contract and architecture",
+        "prompt_completion_training_policy": "blocked by contract and architecture",
+        "data_classes": {
+            "inputs": ["vendor questionnaires", "security evidence", "customer prompts"],
+            "restricted": ["customer confidential data", "security reports"],
+        },
+        "classification_answers": {
+            "ai_system": True,
+            "placed_on_eu_market": True,
+            "direct_user_interaction": True,
+            "synthetic_content_or_deepfake": False,
+            "general_purpose_model": False,
+            "customer_data_used_for_training": False,
+        },
+    },
+    {
+        "name": "Medical Triage Risk Scorer",
+        "owner": "Medical Device Engineering",
+        "business_purpose": "Scores patient triage risk for clinical review as part of a regulated medical workflow.",
+        "source_type": "third_party",
+        "provider_name": "ClinicalAI Vendor",
+        "model_type": "classification model",
+        "foundation_model_used": "none",
+        "deployment_environment": "private VPC",
+        "lifecycle_stage": "development",
+        "regulatory_role": "Deployer",
+        "eu_market": True,
+        "medical_device_related": True,
+        "customer_data_training_policy": "blocked",
+        "prompt_completion_training_policy": "not applicable",
+        "data_classes": {
+            "inputs": ["clinical observations", "device telemetry"],
+            "restricted": ["PHI", "regulated medical data"],
+        },
+        "classification_answers": {
+            "ai_system": True,
+            "placed_on_eu_market": True,
+            "medical_or_critical_infrastructure": True,
+            "safety_component_or_regulated_product": True,
+            "customer_data_used_for_training": False,
+        },
+    },
+    {
+        "name": "Foundation Model Gateway",
+        "owner": "Platform Security",
+        "business_purpose": "Central gateway enforcing private LLM routing, logging, and prompt safety policy.",
+        "source_type": "third_party",
+        "provider_name": "Hosted Model Provider",
+        "model_type": "foundation model gateway",
+        "foundation_model_used": "general purpose foundation model",
+        "deployment_environment": "private endpoint",
+        "lifecycle_stage": "deployed",
+        "regulatory_role": "Deployer",
+        "eu_market": True,
+        "medical_device_related": False,
+        "customer_data_training_policy": "blocked by zero-retention agreement",
+        "prompt_completion_training_policy": "blocked by zero-retention agreement",
+        "data_classes": {
+            "inputs": ["prompts", "retrieved context"],
+            "restricted": ["customer confidential data", "personal data"],
+        },
+        "classification_answers": {
+            "ai_system": True,
+            "placed_on_eu_market": True,
+            "general_purpose_model": True,
+            "systemic_risk_capability": False,
+            "customer_data_used_for_training": False,
+        },
+    },
+]
+
+
+TRUST_CENTER_FRAMEWORKS = [
+    ("SOC 2", "monitored", 86, 42, "SOC 2 control evidence is continuously monitored with gated report access."),
+    ("ISO 27001", "in progress", 73, 51, "ISO 27001 control ownership and evidence collection are actively tracked."),
+    ("HIPAA", "monitored", 79, 28, "HIPAA administrative, physical, and technical safeguards are tracked for healthcare workflows."),
+    ("EU AI Act", "mapped", 68, 31, "AI systems are inventoried and classified against risk-tier transparency obligations."),
+    ("ISO/IEC 42001", "mapped", 61, 38, "AIMS Annex A controls are seeded and mapped to AI systems."),
+]
+
+
+VENDORS = [
+    {
+        "name": "Hosted Model Provider",
+        "service": "Foundation model API",
+        "onboarding_status": "approved with guardrails",
+        "sbom_received": True,
+        "sbom_format": "CycloneDX",
+        "supply_chain_risk": "medium",
+        "data_processing_role": "subprocessor",
+        "evidence_uri": "trust://vendors/hosted-model-provider/sbom",
+    },
+    {
+        "name": "ClinicalAI Vendor",
+        "service": "Medical triage scoring model",
+        "onboarding_status": "risk review required",
+        "sbom_received": False,
+        "sbom_format": "",
+        "supply_chain_risk": "high",
+        "data_processing_role": "processor",
+        "evidence_uri": "trust://vendors/clinical-ai-vendor",
+    },
+]
