@@ -21,7 +21,7 @@ import {
   demoWorkflowInstances,
 } from "./demoData";
 
-const BASE = import.meta.env.VITE_API_BASE_URL ?? "";
+const BASE = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
 
 // Demo fallback (bundled sample data) is opt-in via VITE_DEMO_MODE=true — useful
 // for backendless previews. When off (the default, incl. production) API errors
@@ -374,28 +374,86 @@ export interface TrustCenter {
   documents: TrustDocument[];
 }
 
+type ResponseBody =
+  | { kind: "json"; value: unknown }
+  | { kind: "text"; value: string; contentType: string };
+
+function apiUrl(path: string): string {
+  return `${BASE}${path}`;
+}
+
+function looksLikeJson(text: string): boolean {
+  const trimmed = text.trim();
+  return trimmed.startsWith("{") || trimmed.startsWith("[");
+}
+
+async function readBody(res: Response, path: string): Promise<ResponseBody> {
+  const contentType = res.headers.get("content-type") ?? "";
+  const text = await res.text();
+
+  if (!text) {
+    return { kind: "json", value: null };
+  }
+
+  if (contentType.includes("application/json") || looksLikeJson(text)) {
+    try {
+      return { kind: "json", value: JSON.parse(text) };
+    } catch {
+      throw new Error(`${path} returned invalid JSON from the API.`);
+    }
+  }
+
+  return { kind: "text", value: text, contentType };
+}
+
+function detailFromJson(value: unknown): string | null {
+  if (value && typeof value === "object" && "detail" in value) {
+    return String((value as { detail: unknown }).detail);
+  }
+  return null;
+}
+
+function nonJsonMessage(path: string, status: number, body: ResponseBody): string {
+  if (body.kind === "json") {
+    return `${path} -> ${status}`;
+  }
+
+  if (body.contentType.includes("text/html")) {
+    return `${path} returned HTML instead of JSON. Check VITE_API_BASE_URL or the /api rewrite.`;
+  }
+
+  const preview = body.value.trim().replace(/\s+/g, " ").slice(0, 120);
+  return `${path} returned ${body.contentType || "a non-JSON response"} (${status})${
+    preview ? `: ${preview}` : ""
+  }`;
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(apiUrl(path), init);
+  const body = await readBody(res, path);
+
+  if (!res.ok) {
+    const detail = body.kind === "json" ? detailFromJson(body.value) : null;
+    throw new Error(detail ?? nonJsonMessage(path, res.status, body));
+  }
+
+  if (body.kind !== "json") {
+    throw new Error(nonJsonMessage(path, res.status, body));
+  }
+
+  return body.value as T;
+}
+
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`);
-  if (!res.ok) throw new Error(`${path} → ${res.status}`);
-  return res.json() as Promise<T>;
+  return request<T>(path);
 }
 
 async function send<T>(path: string, method: string, body: unknown): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
+  return request<T>(path, {
     method,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) {
-    let detail = `${res.status}`;
-    try {
-      detail = (await res.json()).detail ?? detail;
-    } catch {
-      /* ignore */
-    }
-    throw new Error(String(detail));
-  }
-  return res.json() as Promise<T>;
 }
 // In demo mode, fall back to bundled demo data when the API is unreachable
 // (e.g. a Vercel preview with no backend wired up). Otherwise, errors propagate
