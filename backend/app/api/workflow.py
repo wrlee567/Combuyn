@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.auth import current_org
 from app.database import get_db
 from app.models.workflow import WorkflowDefinition, WorkflowInstance
 from app.schemas.workflow import (
@@ -30,7 +31,9 @@ from app.services import workflow_engine as engine
 from app.services import workflow_runtime
 from app.services.notifications import notifier, slack
 
-router = APIRouter(prefix="/api/workflows", tags=["workflows"])
+router = APIRouter(
+    prefix="/api/workflows", tags=["workflows"], dependencies=[Depends(current_org)]
+)
 
 
 def _detail(instance: WorkflowInstance) -> WorkflowInstanceDetail:
@@ -58,10 +61,15 @@ def _detail(instance: WorkflowInstance) -> WorkflowInstanceDetail:
     )
 
 
-def _load_instance(db: Session, instance_id: uuid.UUID) -> WorkflowInstance:
+def _load_instance(
+    db: Session, instance_id: uuid.UUID, org_id: uuid.UUID
+) -> WorkflowInstance:
     instance = db.scalar(
         select(WorkflowInstance)
-        .where(WorkflowInstance.id == instance_id)
+        .where(
+            WorkflowInstance.id == instance_id,
+            WorkflowInstance.org_id == org_id,
+        )
         .options(
             selectinload(WorkflowInstance.definition),
             selectinload(WorkflowInstance.events),
@@ -74,16 +82,29 @@ def _load_instance(db: Session, instance_id: uuid.UUID) -> WorkflowInstance:
 
 # Static routes first so they aren't captured by the UUID path param.
 @router.get("/definitions", response_model=list[WorkflowDefinitionSummary])
-def list_definitions(db: Session = Depends(get_db)) -> list[WorkflowDefinitionSummary]:
-    stmt = select(WorkflowDefinition).order_by(WorkflowDefinition.name)
+def list_definitions(
+    db: Session = Depends(get_db), org_id: uuid.UUID = Depends(current_org)
+) -> list[WorkflowDefinitionSummary]:
+    stmt = (
+        select(WorkflowDefinition)
+        .where(WorkflowDefinition.org_id == org_id)
+        .order_by(WorkflowDefinition.name)
+    )
     return [WorkflowDefinitionSummary.model_validate(d) for d in db.scalars(stmt)]
 
 
 @router.get("/definitions/{definition_id}", response_model=WorkflowDefinitionDetail)
 def get_definition(
-    definition_id: uuid.UUID, db: Session = Depends(get_db)
+    definition_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    org_id: uuid.UUID = Depends(current_org),
 ) -> WorkflowDefinitionDetail:
-    definition = db.get(WorkflowDefinition, definition_id)
+    definition = db.scalar(
+        select(WorkflowDefinition).where(
+            WorkflowDefinition.id == definition_id,
+            WorkflowDefinition.org_id == org_id,
+        )
+    )
     if definition is None:
         raise HTTPException(status_code=404, detail="Workflow definition not found")
     return WorkflowDefinitionDetail.model_validate(definition)
@@ -96,17 +117,28 @@ def notifications(limit: int = 50) -> dict:
 
 
 @router.get("", response_model=list[WorkflowInstanceSummary])
-def list_instances(db: Session = Depends(get_db)) -> list[WorkflowInstanceSummary]:
-    stmt = select(WorkflowInstance).order_by(WorkflowInstance.subject)
+def list_instances(
+    db: Session = Depends(get_db), org_id: uuid.UUID = Depends(current_org)
+) -> list[WorkflowInstanceSummary]:
+    stmt = (
+        select(WorkflowInstance)
+        .where(WorkflowInstance.org_id == org_id)
+        .order_by(WorkflowInstance.subject)
+    )
     return [WorkflowInstanceSummary.model_validate(i) for i in db.scalars(stmt)]
 
 
 @router.post("", response_model=WorkflowInstanceDetail, status_code=201)
 def create_instance(
-    payload: InstanceCreate, db: Session = Depends(get_db)
+    payload: InstanceCreate,
+    db: Session = Depends(get_db),
+    org_id: uuid.UUID = Depends(current_org),
 ) -> WorkflowInstanceDetail:
     definition = db.scalar(
-        select(WorkflowDefinition).where(WorkflowDefinition.key == payload.definition_key)
+        select(WorkflowDefinition).where(
+            WorkflowDefinition.key == payload.definition_key,
+            WorkflowDefinition.org_id == org_id,
+        )
     )
     if definition is None:
         raise HTTPException(
@@ -114,7 +146,7 @@ def create_instance(
             detail=f"Unknown workflow definition '{payload.definition_key}'.",
         )
     instance = workflow_runtime.start_instance(
-        db, definition, payload.subject, payload.context, notifier=notifier
+        db, definition, payload.subject, payload.context, org_id=org_id, notifier=notifier
     )
     db.commit()
     db.refresh(instance)
@@ -123,9 +155,11 @@ def create_instance(
 
 @router.get("/{instance_id}", response_model=WorkflowInstanceDetail)
 def get_instance(
-    instance_id: uuid.UUID, db: Session = Depends(get_db)
+    instance_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    org_id: uuid.UUID = Depends(current_org),
 ) -> WorkflowInstanceDetail:
-    return _detail(_load_instance(db, instance_id))
+    return _detail(_load_instance(db, instance_id, org_id))
 
 
 @router.post("/{instance_id}/advance", response_model=WorkflowInstanceDetail)
@@ -133,8 +167,9 @@ def advance(
     instance_id: uuid.UUID,
     payload: AdvanceRequest,
     db: Session = Depends(get_db),
+    org_id: uuid.UUID = Depends(current_org),
 ) -> WorkflowInstanceDetail:
-    instance = _load_instance(db, instance_id)
+    instance = _load_instance(db, instance_id, org_id)
     try:
         workflow_runtime.advance_instance(
             db, instance, payload.action, payload.note, notifier=notifier
@@ -151,8 +186,9 @@ def compensate(
     instance_id: uuid.UUID,
     payload: CompensateRequest,
     db: Session = Depends(get_db),
+    org_id: uuid.UUID = Depends(current_org),
 ) -> WorkflowInstanceDetail:
-    instance = _load_instance(db, instance_id)
+    instance = _load_instance(db, instance_id, org_id)
     try:
         workflow_runtime.compensate_instance(
             db, instance, payload.note, notifier=notifier

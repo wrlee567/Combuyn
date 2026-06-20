@@ -142,3 +142,31 @@ def test_notifications_feed_records_transitions(client):
 def test_get_instance_404(client):
     resp = client.get("/api/workflows/00000000-0000-0000-0000-000000000099")
     assert resp.status_code == 404
+
+
+def test_requires_auth(anon_client):
+    assert anon_client.get("/api/workflows").status_code == 401
+    assert anon_client.get("/api/workflows/definitions").status_code == 401
+
+
+def test_other_tenant_sees_nothing(other_org_client):
+    # A different tenant sees no seeded definitions or instances...
+    assert other_org_client.get("/api/workflows/definitions").json() == []
+    assert other_org_client.get("/api/workflows").json() == []
+    # ...and can't launch a run from a definition it can't see.
+    resp = other_org_client.post(
+        "/api/workflows",
+        json={"definition_key": "vendor_onboarding", "subject": "X"},
+    )
+    assert resp.status_code == 404
+
+
+def test_instance_not_readable_across_tenants(client):
+    import uuid
+
+    from app.auth import create_access_token
+
+    iid = _create_instance(client).json()["id"]
+    # Swap to a different tenant's token on the same client.
+    client.headers["Authorization"] = f"Bearer {create_access_token(uuid.uuid4())}"
+    assert client.get(f"/api/workflows/{iid}").status_code == 404

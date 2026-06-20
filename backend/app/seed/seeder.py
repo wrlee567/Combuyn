@@ -128,34 +128,39 @@ def seed_vendors(db: Session) -> int:
     return created
 
 
-def seed_workflows(db: Session) -> dict[str, int]:
-    """Insert workflow definitions and drive sample instances through them.
+def seed_workflow_definitions(db: Session) -> int:
+    """Insert workflow blueprints (reference data). Idempotent by ``key``.
 
-    Idempotent: definitions are keyed by ``key`` and instances by ``subject``.
-    Sample instances are advanced via the real engine (notifications suppressed)
-    so their persisted state and event log always match the live rules.
-    Returns counts of rows created.
+    Returns the number of definitions created.
     """
-    created = {"definitions": 0, "instances": 0}
-
-    def_by_key: dict[str, WorkflowDefinition] = {}
+    created = 0
     for data in WORKFLOW_DEFINITIONS:
         validate_blueprint(data["blueprint"])
         definition = db.scalar(
             select(WorkflowDefinition).where(WorkflowDefinition.key == data["key"])
         )
         if definition is None:
-            definition = WorkflowDefinition(
-                key=data["key"],
-                name=data["name"],
-                description=data["description"],
-                blueprint=data["blueprint"],
+            db.add(
+                WorkflowDefinition(
+                    key=data["key"],
+                    name=data["name"],
+                    description=data["description"],
+                    blueprint=data["blueprint"],
+                )
             )
-            db.add(definition)
-            db.flush()
-            created["definitions"] += 1
-        def_by_key[definition.key] = definition
+            created += 1
+    db.commit()
+    return created
 
+
+def seed_workflow_instances(db: Session) -> int:
+    """Drive sample instances through their blueprints (demo data).
+
+    Idempotent by ``subject``. Sample instances are advanced via the real engine
+    (notifications suppressed) so their persisted state and event log always match
+    the live rules. Requires definitions to be seeded first. Returns rows created.
+    """
+    created = 0
     for sample in SAMPLE_INSTANCES:
         exists = db.scalar(
             select(WorkflowInstance).where(
@@ -164,13 +169,19 @@ def seed_workflows(db: Session) -> dict[str, int]:
         )
         if exists is not None:
             continue
-        definition = def_by_key[sample["definition_key"]]
+        definition = db.scalar(
+            select(WorkflowDefinition).where(
+                WorkflowDefinition.key == sample["definition_key"]
+            )
+        )
+        if definition is None:
+            continue  # definitions not seeded; skip defensively
         instance = workflow_runtime.start_instance(
             db, definition, sample["subject"], sample.get("context", {})
         )
         for action in sample.get("actions", []):
             workflow_runtime.advance_instance(db, instance, action)
-        created["instances"] += 1
+        created += 1
 
     db.commit()
     return created

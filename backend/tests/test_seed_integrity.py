@@ -54,11 +54,11 @@ def test_sample_instances_reference_known_definitions():
 
 
 def test_seed_workflows_idempotent_second_run_no_error(db_session):
-    from app.seed.seeder import seed_workflows
+    from app.seed.seeder import seed_workflow_definitions, seed_workflow_instances
 
     with db_session() as session:
-        created = seed_workflows(session)
-    assert created == {"definitions": 0, "instances": 0}
+        assert seed_workflow_definitions(session) == 0
+        assert seed_workflow_instances(session) == 0
 
 
 def test_seed_ccf_idempotent_second_run_no_error(db_session):
@@ -75,3 +75,31 @@ def test_seed_vendors_idempotent_second_run_no_error(db_session):
     with db_session() as session:
         created = seed_vendors(session)
     assert created == 0
+
+
+def test_reference_seed_excludes_demo_records():
+    """seed_ai_reference + seed_ccf must populate the catalog but no demo data."""
+    from sqlalchemy import create_engine, func, select
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from app.database import Base
+    from app.models.ai_governance import AISystemInventory, ISO42001AnnexAControl
+    from app.models.vendor import Vendor
+    from app.seed.ai_governance import seed_ai_reference
+    from app.seed.seeder import seed_ccf
+
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine)
+    with Session() as db:
+        seed_ccf(db)
+        seed_ai_reference(db)
+        # Reference catalog is present...
+        assert db.scalar(select(func.count(ISO42001AnnexAControl.id))) > 0
+        # ...but no demo/sample records were created.
+        assert db.scalar(select(func.count(AISystemInventory.id))) == 0
+        assert db.scalar(select(func.count(Vendor.id))) == 0
+    Base.metadata.drop_all(bind=engine)

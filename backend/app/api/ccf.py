@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.auth import current_org
 from app.database import get_db
 from app.models.ccf import (
     CommonControl,
@@ -24,26 +25,50 @@ from app.schemas.ccf import (
     RequirementOut,
 )
 
-router = APIRouter(prefix="/api", tags=["ccf"])
+router = APIRouter(prefix="/api", tags=["ccf"], dependencies=[Depends(current_org)])
 
 
 @router.get("/summary", response_model=CoverageSummary)
-def summary(db: Session = Depends(get_db)) -> CoverageSummary:
+def summary(
+    db: Session = Depends(get_db), org_id: uuid.UUID = Depends(current_org)
+) -> CoverageSummary:
     """Top-level counts for the dashboard."""
     return CoverageSummary(
-        frameworks=db.scalar(select(func.count(Framework.id))) or 0,
-        requirements=db.scalar(select(func.count(FrameworkRequirement.id))) or 0,
-        common_controls=db.scalar(select(func.count(CommonControl.id))) or 0,
-        mappings=db.scalar(select(func.count(ControlRequirementMapping.id))) or 0,
+        frameworks=db.scalar(
+            select(func.count(Framework.id)).where(Framework.org_id == org_id)
+        )
+        or 0,
+        requirements=db.scalar(
+            select(func.count(FrameworkRequirement.id)).where(
+                FrameworkRequirement.org_id == org_id
+            )
+        )
+        or 0,
+        common_controls=db.scalar(
+            select(func.count(CommonControl.id)).where(CommonControl.org_id == org_id)
+        )
+        or 0,
+        mappings=db.scalar(
+            select(func.count(ControlRequirementMapping.id)).where(
+                ControlRequirementMapping.org_id == org_id
+            )
+        )
+        or 0,
     )
 
 
 @router.get("/frameworks", response_model=list[FrameworkOut])
 def list_frameworks(
-    category: str | None = None, db: Session = Depends(get_db)
+    category: str | None = None,
+    db: Session = Depends(get_db),
+    org_id: uuid.UUID = Depends(current_org),
 ) -> list[FrameworkOut]:
     """List frameworks, optionally filtered by category (enterprise/medical)."""
-    stmt = select(Framework).options(selectinload(Framework.requirements))
+    stmt = (
+        select(Framework)
+        .where(Framework.org_id == org_id)
+        .options(selectinload(Framework.requirements))
+    )
     if category:
         stmt = stmt.where(Framework.category == category)
     stmt = stmt.order_by(Framework.name)
@@ -58,10 +83,16 @@ def list_frameworks(
 
 @router.get("/frameworks/{framework_id}/requirements", response_model=list[RequirementOut])
 def list_requirements(
-    framework_id: uuid.UUID, db: Session = Depends(get_db)
+    framework_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    org_id: uuid.UUID = Depends(current_org),
 ) -> list[RequirementOut]:
     """List the requirements/citations for a framework."""
-    fw = db.get(Framework, framework_id)
+    fw = db.scalar(
+        select(Framework).where(
+            Framework.id == framework_id, Framework.org_id == org_id
+        )
+    )
     if fw is None:
         raise HTTPException(status_code=404, detail="Framework not found")
     stmt = (
@@ -73,19 +104,28 @@ def list_requirements(
 
 
 @router.get("/controls", response_model=list[ControlOut])
-def list_controls(db: Session = Depends(get_db)) -> list[ControlOut]:
+def list_controls(
+    db: Session = Depends(get_db), org_id: uuid.UUID = Depends(current_org)
+) -> list[ControlOut]:
     """List common controls."""
-    stmt = select(CommonControl).order_by(CommonControl.key)
+    stmt = (
+        select(CommonControl)
+        .where(CommonControl.org_id == org_id)
+        .order_by(CommonControl.key)
+    )
     return [ControlOut.model_validate(c) for c in db.scalars(stmt)]
 
 
 @router.get("/coverage", response_model=list[ControlCoverageOut])
-def control_coverage(db: Session = Depends(get_db)) -> list[ControlCoverageOut]:
+def control_coverage(
+    db: Session = Depends(get_db), org_id: uuid.UUID = Depends(current_org)
+) -> list[ControlCoverageOut]:
     """The heart of the CCF: each common control with every framework
     requirement it satisfies. This is what proves 'implement once, comply many'.
     """
     stmt = (
         select(CommonControl)
+        .where(CommonControl.org_id == org_id)
         .options(
             selectinload(CommonControl.mappings)
             .selectinload(ControlRequirementMapping.requirement)

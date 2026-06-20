@@ -10,6 +10,8 @@ not flood the live notifications feed.
 
 from __future__ import annotations
 
+import uuid
+
 from sqlalchemy.orm import Session
 
 from app.models.workflow import WorkflowDefinition, WorkflowEvent, WorkflowInstance
@@ -47,12 +49,19 @@ def start_instance(
     definition: WorkflowDefinition,
     subject: str,
     context: dict | None = None,
+    org_id: uuid.UUID | None = None,
     notifier: WorkflowNotifier | None = None,
 ) -> WorkflowInstance:
-    """Create a new instance parked at the blueprint's initial state."""
+    """Create a new instance parked at the blueprint's initial state.
+
+    ``org_id`` defaults to the definition's tenant when not supplied (used by the
+    seeder); the API passes the caller's tenant explicitly.
+    """
     initial = definition.blueprint["initial"]
+    tenant = org_id or definition.org_id
     instance = WorkflowInstance(
         definition_id=definition.id,
+        org_id=tenant,
         subject=subject,
         current_state=initial,
         status="running",
@@ -61,6 +70,7 @@ def start_instance(
     instance.definition = definition
     instance.events.append(
         WorkflowEvent(
+            org_id=tenant,
             sequence=0,
             kind="start",
             action="",
@@ -99,6 +109,7 @@ def advance_instance(
 
     instance.events.append(
         WorkflowEvent(
+            org_id=instance.org_id,
             sequence=_next_sequence(instance),
             kind="transition",
             action=transition.action,
@@ -123,6 +134,7 @@ def advance_instance(
         instance.status = "completed"
         instance.events.append(
             WorkflowEvent(
+                org_id=instance.org_id,
                 sequence=_next_sequence(instance),
                 kind="complete",
                 action="",
@@ -164,6 +176,7 @@ def compensate_instance(
     for step in plan:
         instance.events.append(
             WorkflowEvent(
+                org_id=instance.org_id,
                 sequence=_next_sequence(instance),
                 kind="compensation",
                 action=step.action,
@@ -178,6 +191,7 @@ def compensate_instance(
     instance.status = "compensated"
     instance.events.append(
         WorkflowEvent(
+            org_id=instance.org_id,
             sequence=_next_sequence(instance),
             kind="compensated",
             action="",

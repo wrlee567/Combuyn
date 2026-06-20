@@ -12,10 +12,20 @@ services:
         fromDatabase:
           name: combuyn-db
           property: connectionString
+      # Seed immutable reference data (frameworks, controls, ISO 42001 catalog).
       - key: SEED_ON_STARTUP
         value: "true"
+      # Never seed sample/demo records in production.
+      - key: SEED_DEMO_DATA
+        value: "false"
+      # Schema is managed by Alembic migrations (run before app start), not create_all.
+      - key: AUTO_CREATE_SCHEMA
+        value: "false"
       - key: ENVIRONMENT
         value: production
+      # Signing secret for JWT bearer auth — generated once by Render.
+      - key: JWT_SECRET
+        generateValue: true
       # Set this to your Vercel frontend origin after the first deploy.
       - key: CORS_ORIGINS
         sync: false
