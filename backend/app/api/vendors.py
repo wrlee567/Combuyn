@@ -24,7 +24,7 @@ from app.schemas.vendor import (
 from app.seed.questionnaire import (
     QUESTIONNAIRE_TEMPLATE,
     QUESTIONNAIRE_VERSION,
-    all_question_ids,
+    validate_responses,
 )
 from app.services.risk_scoring import (
     InvalidFactorError,
@@ -103,13 +103,9 @@ def update_questionnaire(
     if vendor is None:
         raise HTTPException(status_code=404, detail="Vendor not found")
 
-    valid_ids = all_question_ids()
-    unknown = set(payload.responses) - valid_ids
-    if unknown:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Unknown question ids: {', '.join(sorted(unknown))}.",
-        )
+    errors = validate_responses(payload.responses)
+    if errors:
+        raise HTTPException(status_code=422, detail="; ".join(errors))
 
     # Merge so partial saves don't wipe prior answers.
     merged = {**vendor.questionnaire_responses, **payload.responses}

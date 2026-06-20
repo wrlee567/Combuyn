@@ -166,3 +166,32 @@ def test_update_nonexistent_vendor(client):
         json={"lifecycle_status": "offboarding"},
     )
     assert resp.status_code == 404
+
+
+def test_questionnaire_rejects_wrong_type_for_boolean(client):
+    vendor = _create(client).json()
+    resp = client.patch(
+        f"/api/vendors/{vendor['id']}/questionnaire",
+        json={"responses": {"mfa_enforced": "yes"}},
+    )
+    assert resp.status_code == 422
+    assert "mfa_enforced" in resp.json()["detail"]
+
+
+def test_questionnaire_rejects_invalid_single_select(client):
+    vendor = _create(client).json()
+    resp = client.patch(
+        f"/api/vendors/{vendor['id']}/questionnaire",
+        json={"responses": {"access_reviews": "weekly"}},
+    )
+    assert resp.status_code == 422
+
+
+def test_questionnaire_accepts_valid_single_select(client):
+    vendor = _create(client).json()
+    resp = client.patch(
+        f"/api/vendors/{vendor['id']}/questionnaire",
+        json={"responses": {"access_reviews": "quarterly"}},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["questionnaire_responses"]["access_reviews"] == "quarterly"

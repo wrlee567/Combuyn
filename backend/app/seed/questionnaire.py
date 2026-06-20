@@ -77,3 +77,41 @@ def all_question_ids() -> set[str]:
         for section in QUESTIONNAIRE_TEMPLATE
         for q in section["questions"]
     }
+
+
+def _questions_by_id() -> dict[str, dict]:
+    return {
+        q["id"]: q
+        for section in QUESTIONNAIRE_TEMPLATE
+        for q in section["questions"]
+    }
+
+
+def validate_responses(responses: dict) -> list[str]:
+    """Validate questionnaire answers against the template.
+
+    Returns a list of human-readable error messages (empty if all valid):
+    rejects unknown question ids and answers whose type doesn't match the
+    question's declared type (boolean / single_select / text).
+    """
+    errors: list[str] = []
+    questions = _questions_by_id()
+    for qid, answer in responses.items():
+        question = questions.get(qid)
+        if question is None:
+            errors.append(f"Unknown question id: {qid}")
+            continue
+        qtype = question["type"]
+        if qtype == "boolean":
+            if not isinstance(answer, bool):
+                errors.append(f"Answer for '{qid}' must be a boolean.")
+        elif qtype == "single_select":
+            options = question.get("options", [])
+            if answer not in options:
+                errors.append(
+                    f"Answer for '{qid}' must be one of: {', '.join(options)}."
+                )
+        elif qtype == "text":
+            if not isinstance(answer, str):
+                errors.append(f"Answer for '{qid}' must be a string.")
+    return errors

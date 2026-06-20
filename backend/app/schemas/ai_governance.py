@@ -5,7 +5,11 @@ from __future__ import annotations
 import uuid
 from datetime import date
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.services.ai_governance import EU_AI_ACT_QUESTIONNAIRE
+
+_AI_ANSWER_KEYS = {q["key"] for q in EU_AI_ACT_QUESTIONNAIRE}
 
 
 class ORMModel(BaseModel):
@@ -172,6 +176,21 @@ class AIClassificationRequest(BaseModel):
     ai_system_id: uuid.UUID
     actor_role: str
     questionnaire_answers: dict[str, object]
+
+    @field_validator("questionnaire_answers")
+    @classmethod
+    def _validate_answers(cls, value: dict[str, object]) -> dict[str, object]:
+        unknown = sorted(set(value) - _AI_ANSWER_KEYS)
+        if unknown:
+            raise ValueError(f"Unknown questionnaire keys: {', '.join(unknown)}")
+        # Require real booleans so string truthiness (e.g. "false") can't flip
+        # a classification.
+        non_bool = sorted(k for k, v in value.items() if not isinstance(v, bool))
+        if non_bool:
+            raise ValueError(
+                f"Answers must be booleans; non-boolean values for: {', '.join(non_bool)}"
+            )
+        return value
 
 
 class TrustFrameworkOut(ORMModel):
