@@ -109,3 +109,29 @@ def test_public_trust_center(client):
     assert {"SOC 2", "ISO 27001", "HIPAA", "EU AI Act", "ISO/IEC 42001"} <= frameworks
     assert len(trust["documents"]) >= 3
     assert any(t["eu_transparency_notice"] == "required" for t in trust["ai_transparency"])
+
+def test_classification_rejects_unknown_keys(client):
+    system = client.get("/api/ai-governance/systems").json()[0]
+    response = client.post(
+        "/api/ai-governance/classifications",
+        json={
+            "ai_system_id": system["id"],
+            "actor_role": "Provider",
+            "questionnaire_answers": {"ai_system": True, "bogus_key": True},
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_classification_rejects_non_boolean_answers(client):
+    system = client.get("/api/ai-governance/systems").json()[0]
+    response = client.post(
+        "/api/ai-governance/classifications",
+        json={
+            "ai_system_id": system["id"],
+            "actor_role": "Provider",
+            # String "false" must not be accepted as a boolean answer.
+            "questionnaire_answers": {"ai_system": True, "placed_on_eu_market": "false"},
+        },
+    )
+    assert response.status_code == 422

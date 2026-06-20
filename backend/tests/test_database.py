@@ -33,3 +33,19 @@ def test_get_db_yields_and_closes():
         next(gen)
     except StopIteration:
         pass
+
+
+def test_create_schema_on_startup_defaults_off_in_production():
+    from app.config import Settings
+
+    prod = Settings(environment="production", database_url="sqlite://")
+    assert prod.create_schema_on_startup is False
+
+    dev = Settings(environment="development", database_url="sqlite://")
+    assert dev.create_schema_on_startup is True
+
+    # Explicit override wins over the environment default.
+    forced = Settings(
+        environment="production", auto_create_schema=True, database_url="sqlite://"
+    )
+    assert forced.create_schema_on_startup is True

@@ -21,6 +21,11 @@ import {
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
+// Demo fallback (bundled sample data) is opt-in via VITE_DEMO_MODE=true — useful
+// for backendless previews. When off (the default, incl. production) API errors
+// surface to the caller instead of being masked by demo data.
+const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === "true";
+
 export interface Summary {
   frameworks: number;
   requirements: number;
@@ -320,9 +325,13 @@ async function send<T>(path: string, method: string, body: unknown): Promise<T> 
   }
   return res.json() as Promise<T>;
 }
-// Try the live API; if it's unreachable (e.g. a Vercel preview with no backend
-// wired up yet), fall back to bundled demo data so the UI stays populated.
+// In demo mode, fall back to bundled demo data when the API is unreachable
+// (e.g. a Vercel preview with no backend wired up). Otherwise, errors propagate
+// so the UI can show a real error/empty state instead of fake-healthy data.
 async function getOrDemo<T>(path: string, demo: T): Promise<T> {
+  if (!DEMO_MODE) {
+    return get<T>(path);
+  }
   try {
     return await get<T>(path);
   } catch {

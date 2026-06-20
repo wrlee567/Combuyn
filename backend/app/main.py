@@ -12,7 +12,7 @@ from app import __version__
 from app.api import ai_governance, ccf, health, vendors
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
-from app.seed.ai_governance import seed_ai_governance
+from app.seed.ai_governance import seed_ai_demo, seed_ai_reference
 from app.seed.seeder import seed_ccf, seed_vendors
 
 # Ensure models are registered on Base.metadata.
@@ -24,22 +24,29 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Iteration 1 uses create_all for a frictionless first run; Alembic
-    # migrations (committed under alembic/) become the source of truth as the
-    # schema evolves in later iterations.
-    Base.metadata.create_all(bind=engine)
+    # create_all gives a frictionless first run in local/test. Production
+    # (ENVIRONMENT=production, or AUTO_CREATE_SCHEMA=false) instead relies on
+    # Alembic migrations run before startup — see backend/README.md.
+    if settings.create_schema_on_startup:
+        Base.metadata.create_all(bind=engine)
 
     if settings.seed_on_startup:
         with SessionLocal() as db:
             created = seed_ccf(db)
-            vendors_created = seed_vendors(db)
-            ai_created = seed_ai_governance(db)
+            ai_ref = seed_ai_reference(db)
         if any(created.values()):
             logger.info("Seeded CCF reference data: %s", created)
+        if any(ai_ref.values()):
+            logger.info("Seeded AI governance reference data: %s", ai_ref)
+
+    if settings.seed_demo_data:
+        with SessionLocal() as db:
+            vendors_created = seed_vendors(db)
+            ai_demo = seed_ai_demo(db)
         if vendors_created:
             logger.info("Seeded sample vendors: %d", vendors_created)
-        if any(ai_created.values()):
-            logger.info("Seeded AI governance reference data: %s", ai_created)
+        if any(ai_demo.values()):
+            logger.info("Seeded AI governance demo data: %s", ai_demo)
     yield
 
 

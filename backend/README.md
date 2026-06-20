@@ -27,17 +27,34 @@ JSON (SQLite).
 
 ## Schema & migrations
 
-Iteration 1 bootstraps the schema with `Base.metadata.create_all` on startup for
-a frictionless first run. Alembic is scaffolded under `alembic/` and wired to the
-ORM metadata; starting with the next schema change we generate versioned
-migrations:
+Local/test runs bootstrap the schema with `Base.metadata.create_all` on startup
+for a frictionless first run. This is gated by `AUTO_CREATE_SCHEMA` (defaults on
+outside production, off when `ENVIRONMENT=production`).
+
+In production, Alembic is the source of truth: the container runs
+`alembic upgrade head` before the app boots (see `Dockerfile`), and `create_all`
+is disabled. An initial baseline lives at
+`alembic/versions/0001_initial_schema.py`. For subsequent schema changes,
+generate a versioned migration (autogenerate against PostgreSQL so JSONB types
+are captured correctly):
 
 ```bash
 alembic revision --autogenerate -m "describe change"
 alembic upgrade head
 ```
 
+## Authentication & tenancy
+
+All `/api/*` routes (except the public `/api/trust-center`) require a JWT bearer
+token: `Authorization: Bearer <token>`. The token's `org_id` claim scopes every
+query to one tenant — a caller never sees another tenant's rows, and
+cross-tenant access to a specific resource returns 404. Tokens are signed with
+`JWT_SECRET` (HS256); `app.auth.create_access_token(org_id)` mints one. Health
+(`/health`, `/ready`) and the public trust center stay unauthenticated.
+
 ## Key endpoints
+
+All paths below require a bearer token unless marked public.
 
 | Method | Path | Purpose |
 |---|---|---|
