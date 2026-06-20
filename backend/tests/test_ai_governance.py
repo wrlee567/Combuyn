@@ -2,6 +2,65 @@
 
 from __future__ import annotations
 
+from app.models.ccf import DEFAULT_ORG_ID
+from app.services.ai_governance import (
+    build_ai_inventory_summary,
+    build_public_trust_center,
+    list_ai_governance_reviews,
+    list_ai_systems,
+)
+
+
+def test_ai_governance_service_assembles_dashboard_summary(db_session):
+    with db_session() as db:
+        summary = build_ai_inventory_summary(db, DEFAULT_ORG_ID)
+
+    assert summary.ai_systems == 3
+    assert summary.iso42001_controls == 38
+    assert summary.high_risk_systems == 1
+    assert summary.gpai_systems == 1
+    assert summary.evidence_items == 12
+    assert summary.overdue_reviews == 1
+
+
+def test_ai_governance_service_attaches_latest_classification(db_session):
+    with db_session() as db:
+        systems = list_ai_systems(db, DEFAULT_ORG_ID)
+
+    tiers = {system.name: system.latest_classification.risk_tier for system in systems}
+    assert tiers["Medical Triage Risk Scorer"] == "High-Risk Systems"
+    assert tiers["Foundation Model Gateway"] == "General Purpose AI (GPAI) Models"
+    assert tiers["Vendor Risk Copilot"] == "Limited Risk Systems"
+
+
+def test_ai_governance_service_counts_review_evidence(db_session):
+    with db_session() as db:
+        reviews = list_ai_governance_reviews(db, DEFAULT_ORG_ID)
+
+    medical = next(
+        review
+        for review in reviews
+        if review.system_name == "Medical Triage Risk Scorer"
+    )
+    assert medical.evidence_ready == 1
+    assert medical.evidence_missing == 3
+    assert [item.requirement for item in medical.evidence_items] == sorted(
+        item.requirement for item in medical.evidence_items
+    )
+
+
+def test_ai_governance_service_builds_public_trust_center(db_session):
+    with db_session() as db:
+        trust = build_public_trust_center(db)
+
+    frameworks = {framework.framework for framework in trust.frameworks}
+    assert {"SOC 2", "ISO 27001", "HIPAA", "EU AI Act", "ISO/IEC 42001"} <= frameworks
+    assert len(trust.documents) >= 3
+    assert any(
+        metric.eu_transparency_notice == "required"
+        for metric in trust.ai_transparency
+    )
+
 
 def test_iso42001_annex_a_control_catalog(client):
     controls = client.get("/api/ai-governance/iso42001/controls").json()
