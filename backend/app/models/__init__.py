@@ -10,6 +10,7 @@ from app.models.ccf import (
     Framework,
     FrameworkRequirement,
 )
+from app.models.vendor import Vendor
 from app.models.ai_governance import (
     AIComplianceTask,
     AIDataPrivacyGuardrail,
@@ -36,6 +37,7 @@ __all__ = [
     "FrameworkRequirement",
     "CommonControl",
     "ControlRequirementMapping",
+    "Vendor",
     "AIComplianceTask",
     "AIDataPrivacyGuardrail",
     "AIEvidenceItem",
