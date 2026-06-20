@@ -10,6 +10,7 @@ from app.models.ccf import (
     Framework,
     FrameworkRequirement,
 )
+from app.models.user import DemoUser
 from app.models.vendor import Vendor
 from app.models.workflow import (
     WorkflowDefinition,
@@ -37,6 +38,7 @@ from app.models.ai_governance import (
 )
 
 __all__ = [
+    "DemoUser",
     "Framework",
     "FrameworkRequirement",
     "CommonControl",

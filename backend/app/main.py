@@ -9,10 +9,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.api import ai_governance, ccf, health, vendors, workflow
+from app.api import ai_governance, auth, ccf, health, vendors, workflow
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
 from app.seed.ai_governance import seed_ai_demo, seed_ai_reference
+from app.seed.demo_user import seed_demo_user
 from app.seed.seeder import (
     seed_ccf,
     seed_vendors,
@@ -39,11 +40,14 @@ async def lifespan(app: FastAPI):
         with SessionLocal() as db:
             created = seed_ccf(db)
             ai_ref = seed_ai_reference(db)
+            demo_user_created = seed_demo_user(db)
             workflow_defs = seed_workflow_definitions(db)
         if any(created.values()):
             logger.info("Seeded CCF reference data: %s", created)
         if any(ai_ref.values()):
             logger.info("Seeded AI governance reference data: %s", ai_ref)
+        if demo_user_created:
+            logger.info("Seeded demo user: %s", settings.demo_user_email)
         if workflow_defs:
             logger.info("Seeded workflow definitions: %d", workflow_defs)
 
@@ -76,6 +80,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router)
 app.include_router(health.router)
 app.include_router(ccf.router)
 app.include_router(vendors.router)

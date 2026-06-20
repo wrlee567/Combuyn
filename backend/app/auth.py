@@ -8,6 +8,8 @@ one tenant can never read or write another tenant's rows.
 
 from __future__ import annotations
 
+import hashlib
+import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -36,6 +38,23 @@ def create_access_token(
         "exp": now + (expires_in or timedelta(hours=12)),
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+
+def hash_password(password: str) -> str:
+    """Hash a password with PBKDF2-SHA256 and a random salt."""
+    salt = secrets.token_hex(16)
+    key = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 200_000)
+    return f"{salt}:{key.hex()}"
+
+
+def verify_password(password: str, stored_hash: str) -> bool:
+    """Return True if password matches the stored PBKDF2 hash."""
+    try:
+        salt, key_hex = stored_hash.split(":", 1)
+    except ValueError:
+        return False
+    key = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 200_000)
+    return secrets.compare_digest(key.hex(), key_hex)
 
 
 def current_org(
