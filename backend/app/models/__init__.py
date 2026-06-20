@@ -11,6 +11,11 @@ from app.models.ccf import (
     FrameworkRequirement,
 )
 from app.models.vendor import Vendor
+from app.models.workflow import (
+    WorkflowDefinition,
+    WorkflowEvent,
+    WorkflowInstance,
+)
 from app.models.ai_governance import (
     AIComplianceTask,
     AIDataPrivacyGuardrail,
@@ -37,6 +42,9 @@ __all__ = [
     "CommonControl",
     "ControlRequirementMapping",
     "Vendor",
+    "WorkflowDefinition",
+    "WorkflowInstance",
+    "WorkflowEvent",
     "AIComplianceTask",
     "AIDataPrivacyGuardrail",
     "AIEvidenceItem",

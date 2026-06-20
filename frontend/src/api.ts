@@ -17,6 +17,8 @@ import {
   demoTasks,
   demoTrustCenter,
   demoVendors,
+  demoWorkflowDefinitions,
+  demoWorkflowInstances,
 } from "./demoData";
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? "";
@@ -114,6 +116,76 @@ export interface QuestionnaireTemplate {
       options?: string[];
     }[];
   }[];
+}
+
+// ---- Workflow Orchestration (Iteration 3) ----
+
+export interface BlueprintState {
+  id: string;
+  label?: string;
+  type?: "start" | "end";
+}
+
+export interface BlueprintTransition {
+  action: string;
+  from: string;
+  to: string;
+  compensation?: string;
+}
+
+export interface Blueprint {
+  initial: string;
+  states: BlueprintState[];
+  transitions: BlueprintTransition[];
+}
+
+export interface WorkflowDefinitionSummary {
+  id: string;
+  key: string;
+  name: string;
+  description: string;
+}
+
+export interface WorkflowDefinitionDetail extends WorkflowDefinitionSummary {
+  blueprint: Blueprint;
+}
+
+export interface WorkflowEvent {
+  sequence: number;
+  kind: string;
+  action: string;
+  from_state: string;
+  to_state: string;
+  note: string;
+}
+
+export interface TransitionOption {
+  action: string;
+  target: string;
+  compensation: string;
+}
+
+export interface WorkflowInstanceSummary {
+  id: string;
+  definition_id: string;
+  subject: string;
+  current_state: string;
+  status: string;
+}
+
+export interface WorkflowInstanceDetail extends WorkflowInstanceSummary {
+  definition_key: string;
+  definition_name: string;
+  context: Record<string, unknown>;
+  blueprint: Blueprint;
+  events: WorkflowEvent[];
+  available_actions: TransitionOption[];
+}
+
+export interface InstanceCreate {
+  definition_key: string;
+  subject: string;
+  context?: Record<string, unknown>;
 }
 
 export interface AIGovernanceSummary {
@@ -356,6 +428,27 @@ export const api = {
     send<VendorDetail>(`/api/vendors/${id}/lifecycle`, "PATCH", {
       lifecycle_status,
     }),
+  workflowDefinitions: () =>
+    getOrDemo<WorkflowDefinitionSummary[]>(
+      "/api/workflows/definitions",
+      demoWorkflowDefinitions
+    ),
+  workflowInstances: () =>
+    getOrDemo<WorkflowInstanceSummary[]>(
+      "/api/workflows",
+      demoWorkflowInstances
+    ),
+  workflowInstance: (id: string) =>
+    get<WorkflowInstanceDetail>(`/api/workflows/${id}`),
+  createWorkflowInstance: (body: InstanceCreate) =>
+    send<WorkflowInstanceDetail>("/api/workflows", "POST", body),
+  advanceWorkflow: (id: string, action: string) =>
+    send<WorkflowInstanceDetail>(`/api/workflows/${id}/advance`, "POST", {
+      action,
+    }),
+  compensateWorkflow: (id: string) =>
+    send<WorkflowInstanceDetail>(`/api/workflows/${id}/compensate`, "POST", {}),
+
   aiGovernanceSummary: () =>
     getOrDemo<AIGovernanceSummary>(
       "/api/ai-governance/summary",

@@ -28,7 +28,10 @@ Render (API+DB) + Vercel (frontend, root `frontend`) · mock-first, no cloud cre
 Feature branch → PR into `main`; both CI jobs green. One task per session.
 
 ## Status
-✅ Iter 0–2 (Foundation, CCF, TPRM Vendors). 🚧 AI Governance (ISO 42001, EU AI Act, NIST
-AI RMF, Trust Center) — re-plug vendors in `main.py`, `models/__init__.py`, `conftest.py`,
-`api.ts`. ⬜ Next: Iter 3 (Workflow Orchestration) → Iter 4 (Evidence & Compliance) →
-Iter 5 (BI Dashboards & ROI).
+✅ Iter 0–3 (Foundation, CCF, TPRM Vendors, Workflow Orchestration) + AI Governance
+(ISO 42001, EU AI Act, NIST AI RMF, Trust Center) + security hardening (JWT auth, tenant
+isolation, Alembic baseline). Iter 3 adds a durable state machine
+(`workflow_definitions`/`workflow_instances`/`workflow_events`), a pure engine in
+`services/workflow_engine.py`, Saga compensation + observer→mock-Slack notifications, and the
+Workflows UI — wired in `main.py`, `models/__init__.py`, `conftest.py`, `api.ts`.
+⬜ Next: Iter 4 (Evidence & Compliance) → Iter 5 (BI Dashboards & ROI).

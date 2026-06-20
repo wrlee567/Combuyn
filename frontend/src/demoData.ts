@@ -16,6 +16,8 @@ import type {
   Summary,
   TrustCenter,
   VendorSummary,
+  WorkflowDefinitionSummary,
+  WorkflowInstanceSummary,
 } from "./api";
 
 export const demoSummary: Summary = {
@@ -181,6 +183,48 @@ export const demoVendors: VendorSummary[] = [
     lifecycle_status: "management",
     inherent_risk_score: 7,
     inherent_risk_tier: "Low",
+  },
+];
+
+// Workflow orchestration demo data (mirrors app/seed/workflow_reference.py).
+export const demoWorkflowDefinitions: WorkflowDefinitionSummary[] = [
+  {
+    id: "demo-wf-vendor",
+    key: "vendor_onboarding",
+    name: "Vendor Onboarding Approval",
+    description:
+      "Gates a new third party through security, risk, and legal review before approval.",
+  },
+  {
+    id: "demo-wf-access",
+    key: "access_request",
+    name: "Privileged Access Request",
+    description:
+      "Provisions privileged access after manager and security approval, then schedules a review.",
+  },
+];
+
+export const demoWorkflowInstances: WorkflowInstanceSummary[] = [
+  {
+    id: "demo-inst-cedar",
+    definition_id: "demo-wf-vendor",
+    subject: "Cedar Analytics onboarding",
+    current_state: "approved",
+    status: "completed",
+  },
+  {
+    id: "demo-inst-northwind",
+    definition_id: "demo-wf-vendor",
+    subject: "Northwind Payments onboarding",
+    current_state: "risk_assessment",
+    status: "running",
+  },
+  {
+    id: "demo-inst-access",
+    definition_id: "demo-wf-access",
+    subject: "Prod DB admin for S. Okafor",
+    current_state: "security_approval",
+    status: "running",
   },
 ];
 

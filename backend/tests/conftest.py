@@ -28,7 +28,12 @@ from app.database import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.ccf import DEFAULT_ORG_ID  # noqa: E402
 from app.seed.ai_governance import seed_ai_governance  # noqa: E402
-from app.seed.seeder import seed_ccf, seed_vendors  # noqa: E402
+from app.seed.seeder import (  # noqa: E402
+    seed_ccf,
+    seed_vendors,
+    seed_workflow_definitions,
+    seed_workflow_instances,
+)
 
 
 @pytest.fixture()
@@ -44,6 +49,8 @@ def db_session():
     with TestingSession() as session:
         seed_ccf(session)
         seed_vendors(session)
+        seed_workflow_definitions(session)
+        seed_workflow_instances(session)
         seed_ai_governance(session)
 
     yield TestingSession
