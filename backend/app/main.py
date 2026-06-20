@@ -24,10 +24,11 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Iteration 1 uses create_all for a frictionless first run; Alembic
-    # migrations (committed under alembic/) become the source of truth as the
-    # schema evolves in later iterations.
-    Base.metadata.create_all(bind=engine)
+    # create_all gives a frictionless first run in local/test. Production
+    # (ENVIRONMENT=production, or AUTO_CREATE_SCHEMA=false) instead relies on
+    # Alembic migrations run before startup — see backend/README.md.
+    if settings.create_schema_on_startup:
+        Base.metadata.create_all(bind=engine)
 
     if settings.seed_on_startup:
         with SessionLocal() as db:

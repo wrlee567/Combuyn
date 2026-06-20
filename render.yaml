@@ -18,6 +18,9 @@ services:
       # Never seed sample/demo records in production.
       - key: SEED_DEMO_DATA
         value: "false"
+      # Schema is managed by Alembic migrations (run before app start), not create_all.
+      - key: AUTO_CREATE_SCHEMA
+        value: "false"
       - key: ENVIRONMENT
         value: production
       # Set this to your Vercel frontend origin after the first deploy.

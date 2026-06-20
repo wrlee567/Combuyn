@@ -27,10 +27,16 @@ JSON (SQLite).
 
 ## Schema & migrations
 
-Iteration 1 bootstraps the schema with `Base.metadata.create_all` on startup for
-a frictionless first run. Alembic is scaffolded under `alembic/` and wired to the
-ORM metadata; starting with the next schema change we generate versioned
-migrations:
+Local/test runs bootstrap the schema with `Base.metadata.create_all` on startup
+for a frictionless first run. This is gated by `AUTO_CREATE_SCHEMA` (defaults on
+outside production, off when `ENVIRONMENT=production`).
+
+In production, Alembic is the source of truth: the container runs
+`alembic upgrade head` before the app boots (see `Dockerfile`), and `create_all`
+is disabled. An initial baseline lives at
+`alembic/versions/0001_initial_schema.py`. For subsequent schema changes,
+generate a versioned migration (autogenerate against PostgreSQL so JSONB types
+are captured correctly):
 
 ```bash
 alembic revision --autogenerate -m "describe change"

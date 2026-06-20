@@ -30,7 +30,6 @@ from app.models.ai_governance import (
     TrustCenterDocumentRequest,
     TrustCenterFrameworkStatus,
 )
-from app.models.vendor import Vendor
 
 __all__ = [
     "Framework",
@@ -55,5 +54,4 @@ __all__ = [
     "TrustCenterAITransparencyMetric",
     "TrustCenterDocumentRequest",
     "TrustCenterFrameworkStatus",
-    "Vendor",
 ]

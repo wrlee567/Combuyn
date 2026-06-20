@@ -26,9 +26,20 @@ class Settings(BaseSettings):
     # MUST stay false in production — these are illustrative, not real data.
     seed_demo_data: bool = False
 
+    # Create tables via Base.metadata.create_all on startup. Convenient for
+    # local/test, but production should run Alembic migrations instead. When
+    # unset, defaults to on outside production.
+    auto_create_schema: bool | None = None
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def create_schema_on_startup(self) -> bool:
+        if self.auto_create_schema is not None:
+            return self.auto_create_schema
+        return self.environment.lower() not in {"production", "prod"}
 
 
 @lru_cache
