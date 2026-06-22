@@ -2,6 +2,7 @@
 // In dev, Vite proxies these paths to the FastAPI backend (see vite.config.ts).
 // In production (Vercel), set VITE_API_BASE_URL to the Render backend URL.
 
+import { getToken } from "./auth/token";
 import {
   demoAIGovernanceSummary,
   demoAIVendors,
@@ -374,6 +375,19 @@ export interface TrustCenter {
   documents: TrustDocument[];
 }
 
+// Callback invoked on 401 — set by AuthContext so api.ts stays React-free.
+let _on401: (() => void) | null = null;
+export function setOn401Handler(fn: (() => void) | null): void {
+  _on401 = fn;
+}
+
+function authHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const token = getToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return headers;
+}
+
 type ResponseBody =
   | { kind: "json"; value: unknown }
   | { kind: "text"; value: string; contentType: string };
@@ -435,6 +449,12 @@ function nonJsonMessage(path: string, status: number, body: ResponseBody): strin
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(apiUrl(path), init);
+
+  if (res.status === 401) {
+    _on401?.();
+    throw new Error("401 Unauthorized");
+  }
+
   const body = await readBody(res, path);
 
   if (!res.ok) {
@@ -450,13 +470,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 async function get<T>(path: string): Promise<T> {
-  return request<T>(path);
+  return request<T>(path, { headers: authHeaders() });
 }
 
 async function send<T>(path: string, method: string, body: unknown): Promise<T> {
   return request<T>(path, {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(),
     body: JSON.stringify(body),
   });
 }

@@ -1,4 +1,5 @@
-import { NavLink, Route, Routes } from "react-router-dom";
+import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
+import { AuthProvider, useAuth } from "./auth";
 import Dashboard from "./pages/Dashboard";
 import Frameworks from "./pages/Frameworks";
 import Coverage from "./pages/Coverage";
@@ -9,8 +10,20 @@ import Workflows from "./pages/Workflows";
 import WorkflowDetail from "./pages/WorkflowDetail";
 import AIGovernance from "./pages/AIGovernance";
 import TrustCenter from "./pages/TrustCenter";
+import Login from "./pages/Login";
 
-export default function App() {
+// Redirects unauthenticated users to /login, except /trust-center which is public.
+function RequireAuth({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated } = useAuth();
+  const location = useLocation();
+  if (!isAuthenticated && location.pathname !== "/trust-center") {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+  return <>{children}</>;
+}
+
+function AuthenticatedLayout() {
+  const { isAuthenticated, logout } = useAuth();
   return (
     <div className="layout">
       <aside className="sidebar">
@@ -33,6 +46,13 @@ export default function App() {
           <NavLink to="/ai-governance">AI Governance</NavLink>
           <NavLink to="/trust-center">Trust Center</NavLink>
         </nav>
+        {isAuthenticated && (
+          <div style={{ marginTop: "auto", paddingTop: 24 }}>
+            <button className="logout-btn" onClick={logout}>
+              Sign out
+            </button>
+          </div>
+        )}
       </aside>
       <main className="main">
         <Routes>
@@ -49,5 +69,23 @@ export default function App() {
         </Routes>
       </main>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route
+          path="/*"
+          element={
+            <RequireAuth>
+              <AuthenticatedLayout />
+            </RequireAuth>
+          }
+        />
+      </Routes>
+    </AuthProvider>
   );
 }

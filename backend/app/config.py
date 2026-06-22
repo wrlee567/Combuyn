@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     jwt_secret: str = "dev-insecure-secret-change-me"
     jwt_algorithm: str = "HS256"
 
+    # Demo user seeded on startup (mock-first auth — no cloud IdP needed).
+    # Override in production if real auth is added.
+    demo_user_email: str = "demo@combuyn.dev"
+    demo_user_password: str = "demo"
+
     # Create tables via Base.metadata.create_all on startup. Convenient for
     # local/test, but production should run Alembic migrations instead. When
     # unset, defaults to on outside production.
