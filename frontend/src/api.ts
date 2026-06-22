@@ -22,6 +22,7 @@ import {
 } from "./demoData";
 
 const BASE = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+const TOKEN_STORAGE_KEY = "combuyn.demoAccessToken";
 
 // Demo fallback (bundled sample data) is opt-in via VITE_DEMO_MODE=true — useful
 // for backendless previews. When off (the default, incl. production) API errors
@@ -378,6 +379,11 @@ type ResponseBody =
   | { kind: "json"; value: unknown }
   | { kind: "text"; value: string; contentType: string };
 
+interface DemoTokenResponse {
+  access_token: string;
+  token_type: "bearer";
+}
+
 function apiUrl(path: string): string {
   if (!BASE && import.meta.env.PROD && !DEMO_MODE) {
     throw new Error(
@@ -385,6 +391,49 @@ function apiUrl(path: string): string {
     );
   }
   return `${BASE}${path}`;
+}
+
+function storedToken(): string | null {
+  return window.localStorage.getItem(TOKEN_STORAGE_KEY);
+}
+
+function saveToken(token: string): void {
+  window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
+}
+
+function clearToken(): void {
+  window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+}
+
+async function fetchDemoToken(): Promise<string> {
+  const res = await fetch(apiUrl("/auth/demo-token"), { method: "POST" });
+  const body = await readBody(res, "/auth/demo-token");
+
+  if (!res.ok) {
+    const detail = body.kind === "json" ? detailFromJson(body.value) : null;
+    throw new Error(detail ?? nonJsonMessage("/auth/demo-token", res.status, body));
+  }
+
+  if (body.kind !== "json") {
+    throw new Error(nonJsonMessage("/auth/demo-token", res.status, body));
+  }
+
+  const token = (body.value as DemoTokenResponse).access_token;
+  if (!token) {
+    throw new Error("/auth/demo-token did not return an access token.");
+  }
+  saveToken(token);
+  return token;
+}
+
+async function tokenForRequest(): Promise<string> {
+  return storedToken() ?? fetchDemoToken();
+}
+
+function withAuth(init: RequestInit | undefined, token: string): RequestInit {
+  const headers = new Headers(init?.headers);
+  headers.set("Authorization", `Bearer ${token}`);
+  return { ...init, headers };
 }
 
 function looksLikeJson(text: string): boolean {
@@ -433,9 +482,22 @@ function nonJsonMessage(path: string, status: number, body: ResponseBody): strin
   }`;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(apiUrl(path), init);
+async function request<T>(
+  path: string,
+  init?: RequestInit,
+  retryOnUnauthorized = true,
+): Promise<T> {
+  const requestInit = DEMO_MODE
+    ? init
+    : withAuth(init, await tokenForRequest());
+  const res = await fetch(apiUrl(path), requestInit);
   const body = await readBody(res, path);
+
+  if (!DEMO_MODE && res.status === 401 && retryOnUnauthorized) {
+    clearToken();
+    await fetchDemoToken();
+    return request<T>(path, init, false);
+  }
 
   if (!res.ok) {
     const detail = body.kind === "json" ? detailFromJson(body.value) : null;

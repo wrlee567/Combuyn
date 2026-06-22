@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.api import ai_governance, ccf, health, vendors, workflow
+from app.api import ai_governance, auth, ccf, health, vendors, workflow
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
 from app.seed.ai_governance import seed_ai_demo, seed_ai_reference
@@ -77,6 +77,7 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(auth.router)
 app.include_router(ccf.router)
 app.include_router(vendors.router)
 app.include_router(workflow.router)

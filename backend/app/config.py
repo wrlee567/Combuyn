@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     jwt_secret: str = "dev-insecure-secret-change-me"
     jwt_algorithm: str = "HS256"
 
+    # Demo-only token minting endpoint for portfolio previews. Disabled unless
+    # explicitly enabled in the backend environment.
+    enable_demo_auth: bool = False
+
     # Create tables via Base.metadata.create_all on startup. Convenient for
     # local/test, but production should run Alembic migrations instead. When
     # unset, defaults to on outside production.
