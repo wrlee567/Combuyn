@@ -7,6 +7,7 @@ import {
   demoAIVendors,
   demoAIReviews,
   demoAISystems,
+  demoLaunchGate,
   demoCoverage,
   demoFrameworks,
   demoGuardrails,
@@ -350,6 +351,7 @@ export interface TrustFramework {
 
 export interface TrustTransparency {
   id: string;
+  ai_system_id: string | null;
   system_name: string;
   direct_user_interaction: boolean;
   biometric_data: boolean;
@@ -373,6 +375,44 @@ export interface TrustCenter {
   frameworks: TrustFramework[];
   ai_transparency: TrustTransparency[];
   documents: TrustDocument[];
+}
+
+export interface LaunchGateReadiness {
+  score: number;
+  state: string;
+  evidence_ready: number;
+  evidence_total: number;
+  evidence_missing: number;
+  evidence_rejected: number;
+  guardrails_passing: number;
+  guardrails_total: number;
+  tasks_complete: number;
+  tasks_total: number;
+  approval_blockers: string[];
+}
+
+export interface AILaunchGate {
+  system: AISystem;
+  latest_classification: AIClassification | null;
+  tasks: AIComplianceTask[];
+  guardrails: AIGuardrail | null;
+  impact_assessment: AIImpactAssessment | null;
+  governance_review: AIGovernanceReview | null;
+  evidence_items: AIEvidenceItem[];
+  trust_center_transparency: TrustTransparency | null;
+  readiness: LaunchGateReadiness;
+}
+
+export interface EvidencePatch {
+  status?: "missing" | "provided" | "accepted" | "rejected";
+  evidence_uri?: string;
+  notes?: string;
+}
+
+export interface ReviewDecisionPatch {
+  status: string;
+  decision_summary: string;
+  next_review_date: string | null;
 }
 
 type ResponseBody =
@@ -553,6 +593,40 @@ async function send<T>(path: string, method: string, body: unknown): Promise<T> 
     body: JSON.stringify(body),
   });
 }
+
+function updateDemoEvidence(id: string, body: EvidencePatch): AIEvidenceItem {
+  for (const review of demoAIReviews) {
+    const item = review.evidence_items.find((evidence) => evidence.id === id);
+    if (!item) continue;
+    Object.assign(item, body);
+    review.evidence_ready = review.evidence_items.filter((evidence) =>
+      ["accepted", "provided"].includes(evidence.status),
+    ).length;
+    review.evidence_missing = review.evidence_items.filter(
+      (evidence) => evidence.status === "missing",
+    ).length;
+    return item;
+  }
+  throw new Error("Evidence item not found");
+}
+
+function updateDemoReviewDecision(
+  id: string,
+  body: ReviewDecisionPatch,
+): AIGovernanceReview {
+  const review = demoAIReviews.find((candidate) => candidate.id === id);
+  if (!review) throw new Error("Governance review not found");
+  if (
+    ["approved", "approved with conditions"].includes(body.status) &&
+    review.evidence_items.some((item) => ["missing", "rejected"].includes(item.status))
+  ) {
+    throw new Error("Missing or rejected evidence blocks approval.");
+  }
+  review.status = body.status;
+  review.decision_summary = body.decision_summary;
+  review.next_review_date = body.next_review_date;
+  return review;
+}
 // In demo mode, fall back to bundled demo data when the API is unreachable
 // (e.g. a Vercel preview with no backend wired up). Otherwise, errors propagate
 // so the UI can show a real error/empty state instead of fake-healthy data.
@@ -612,6 +686,11 @@ export const api = {
     ),
   aiSystems: () =>
     getOrDemo<AISystem[]>("/api/ai-governance/systems", demoAISystems),
+  aiLaunchGate: (id: string) =>
+    getOrDemo<AILaunchGate>(
+      `/api/ai-governance/systems/${id}/launch-gate`,
+      demoLaunchGate(id),
+    ),
   iso42001Controls: () =>
     getOrDemo<ISO42001Control[]>(
       "/api/ai-governance/iso42001/controls",
@@ -631,6 +710,18 @@ export const api = {
       "/api/ai-governance/reviews",
       demoAIReviews,
     ),
+  updateAIEvidence: (id: string, body: EvidencePatch) =>
+    DEMO_MODE
+      ? Promise.resolve(updateDemoEvidence(id, body))
+      : send<AIEvidenceItem>(`/api/ai-governance/evidence/${id}`, "PATCH", body),
+  updateAIReviewDecision: (id: string, body: ReviewDecisionPatch) =>
+    DEMO_MODE
+      ? Promise.resolve(updateDemoReviewDecision(id, body))
+      : send<AIGovernanceReview>(
+          `/api/ai-governance/reviews/${id}/decision`,
+          "PATCH",
+          body,
+        ),
   medicalAIRisks: () =>
     getOrDemo<MedicalAIRisk[]>(
       "/api/ai-governance/medical-risk",

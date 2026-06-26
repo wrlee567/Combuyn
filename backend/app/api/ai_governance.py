@@ -13,9 +13,13 @@ from app.schemas.ai_governance import (
     AIClassificationOut,
     AIClassificationRequest,
     AIComplianceTaskOut,
+    AIEvidenceItemOut,
+    AIEvidencePatch,
     AIGovernanceReviewOut,
+    AIReviewDecisionPatch,
     AIImpactAssessmentOut,
     AIInventorySummary,
+    AILaunchGateOut,
     AISystemOut,
     ClassificationQuestionOut,
     GuardrailOut,
@@ -27,6 +31,7 @@ from app.schemas.ai_governance import (
 from app.services.ai_governance import (
     EU_AI_ACT_QUESTIONNAIRE,
     build_ai_inventory_summary,
+    build_launch_gate_payload,
     build_public_trust_center,
     create_classification_for_system,
     list_ai_compliance_tasks,
@@ -37,6 +42,8 @@ from app.services.ai_governance import (
     list_ai_vendor_providers,
     list_iso42001_controls as list_iso42001_control_catalog,
     list_medical_ai_risks,
+    update_evidence_item,
+    update_review_decision,
 )
 
 router = APIRouter(
@@ -60,6 +67,18 @@ def list_systems(
     db: Session = Depends(get_db), org_id: uuid.UUID = Depends(current_org)
 ) -> list[AISystemOut]:
     return list_ai_systems(db, org_id)
+
+
+@router.get("/systems/{system_id}/launch-gate", response_model=AILaunchGateOut)
+def system_launch_gate(
+    system_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    org_id: uuid.UUID = Depends(current_org),
+) -> AILaunchGateOut:
+    payload = build_launch_gate_payload(db, org_id, system_id)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="AI system not found")
+    return payload
 
 
 @router.get("/iso42001/controls", response_model=list[ISO42001ControlOut])
@@ -119,6 +138,49 @@ def list_governance_reviews(
     db: Session = Depends(get_db), org_id: uuid.UUID = Depends(current_org)
 ) -> list[AIGovernanceReviewOut]:
     return list_ai_governance_reviews(db, org_id)
+
+
+@router.patch("/evidence/{evidence_id}", response_model=AIEvidenceItemOut)
+def patch_evidence(
+    evidence_id: uuid.UUID,
+    payload: AIEvidencePatch,
+    db: Session = Depends(get_db),
+    org_id: uuid.UUID = Depends(current_org),
+) -> AIEvidenceItemOut:
+    evidence = update_evidence_item(
+        db,
+        org_id,
+        evidence_id,
+        status=payload.status,
+        evidence_uri=payload.evidence_uri,
+        notes=payload.notes,
+    )
+    if evidence is None:
+        raise HTTPException(status_code=404, detail="Evidence item not found")
+    return evidence
+
+
+@router.patch("/reviews/{review_id}/decision", response_model=AIGovernanceReviewOut)
+def patch_review_decision(
+    review_id: uuid.UUID,
+    payload: AIReviewDecisionPatch,
+    db: Session = Depends(get_db),
+    org_id: uuid.UUID = Depends(current_org),
+) -> AIGovernanceReviewOut:
+    try:
+        review = update_review_decision(
+            db,
+            org_id,
+            review_id,
+            status=payload.status,
+            decision_summary=payload.decision_summary,
+            next_review_date=payload.next_review_date,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if review is None:
+        raise HTTPException(status_code=404, detail="Governance review not found")
+    return review
 
 
 @router.get("/medical-risk", response_model=list[MedicalAIRiskOut])

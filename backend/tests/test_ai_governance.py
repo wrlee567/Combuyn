@@ -5,6 +5,7 @@ from __future__ import annotations
 from app.models.ccf import DEFAULT_ORG_ID
 from app.services.ai_governance import (
     build_ai_inventory_summary,
+    build_launch_gate_payload,
     build_public_trust_center,
     list_ai_governance_reviews,
     list_ai_systems,
@@ -62,6 +63,73 @@ def test_ai_governance_service_builds_public_trust_center(db_session):
     )
 
 
+def test_launch_gate_payload_includes_required_artifacts(db_session):
+    with db_session() as db:
+        systems = list_ai_systems(db, DEFAULT_ORG_ID)
+        system = next(s for s in systems if s.name == "Vendor Risk Copilot")
+        gate = build_launch_gate_payload(db, DEFAULT_ORG_ID, system.id)
+
+    assert gate is not None
+    assert gate.system.name == "Vendor Risk Copilot"
+    assert gate.latest_classification is not None
+    assert gate.tasks
+    assert gate.guardrails is not None
+    assert gate.impact_assessment is not None
+    assert gate.governance_review is not None
+    assert len(gate.evidence_items) == 4
+    assert gate.trust_center_transparency is not None
+    assert gate.readiness.state == "ready"
+
+
+def test_missing_evidence_blocks_launch_approval_service(db_session):
+    with db_session() as db:
+        systems = list_ai_systems(db, DEFAULT_ORG_ID)
+        system = next(s for s in systems if s.name == "Medical Triage Risk Scorer")
+        gate = build_launch_gate_payload(db, DEFAULT_ORG_ID, system.id)
+
+    assert gate is not None
+    assert gate.readiness.state == "blocked"
+    assert gate.readiness.evidence_missing == 3
+    assert gate.readiness.approval_blockers
+
+
+def test_evidence_updates_change_launch_gate_readiness_counts(client):
+    system = next(
+        s for s in client.get("/api/ai-governance/systems").json()
+        if s["name"] == "Medical Triage Risk Scorer"
+    )
+    gate = client.get(f"/api/ai-governance/systems/{system['id']}/launch-gate").json()
+    missing = next(item for item in gate["evidence_items"] if item["status"] == "missing")
+
+    response = client.patch(
+        f"/api/ai-governance/evidence/{missing['id']}",
+        json={
+            "status": "provided",
+            "evidence_uri": "trust://ai-evidence/medical-triage-risk-scorer/data-governance",
+            "notes": "Uploaded for council review.",
+        },
+    )
+
+    assert response.status_code == 200
+    updated_gate = client.get(
+        f"/api/ai-governance/systems/{system['id']}/launch-gate"
+    ).json()
+    assert updated_gate["readiness"]["evidence_ready"] == 2
+    assert updated_gate["readiness"]["evidence_missing"] == 2
+
+
+def test_trust_center_sync_reflects_transparency_classification_answers(db_session):
+    with db_session() as db:
+        systems = list_ai_systems(db, DEFAULT_ORG_ID)
+        system = next(s for s in systems if s.name == "Vendor Risk Copilot")
+        gate = build_launch_gate_payload(db, DEFAULT_ORG_ID, system.id)
+
+    assert gate is not None
+    assert gate.trust_center_transparency is not None
+    assert gate.trust_center_transparency.direct_user_interaction is True
+    assert gate.trust_center_transparency.eu_transparency_notice == "required"
+
+
 def test_iso42001_annex_a_control_catalog(client):
     controls = client.get("/api/ai-governance/iso42001/controls").json()
     assert len(controls) == 38
@@ -101,6 +169,17 @@ def test_seeded_systems_have_expected_classification_tiers(client):
     assert tiers["Medical Triage Risk Scorer"] == "High-Risk Systems"
     assert tiers["Foundation Model Gateway"] == "General Purpose AI (GPAI) Models"
     assert tiers["Vendor Risk Copilot"] == "Limited Risk Systems"
+
+
+def test_launch_gate_detail_is_tenant_scoped(db_session, other_org_client):
+    with db_session() as db:
+        system = list_ai_systems(db, DEFAULT_ORG_ID)[0]
+
+    response = other_org_client.get(
+        f"/api/ai-governance/systems/{system.id}/launch-gate"
+    )
+
+    assert response.status_code == 404
 
 
 def test_classification_endpoint_generates_role_specific_tasks(client):
@@ -159,6 +238,69 @@ def test_governance_reviews_expose_evidence_register(client):
         item["requirement"] == "Data governance" and item["status"] == "missing"
         for item in medical["evidence_items"]
     )
+
+
+def test_invalid_evidence_status_returns_422(client):
+    review = client.get("/api/ai-governance/reviews").json()[0]
+    evidence = review["evidence_items"][0]
+
+    response = client.patch(
+        f"/api/ai-governance/evidence/{evidence['id']}",
+        json={"status": "almost_ready"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_approval_is_rejected_while_evidence_is_missing(client):
+    review = next(
+        r for r in client.get("/api/ai-governance/reviews").json()
+        if r["system_name"] == "Medical Triage Risk Scorer"
+    )
+
+    response = client.patch(
+        f"/api/ai-governance/reviews/{review['id']}/decision",
+        json={
+            "status": "approved",
+            "decision_summary": "Approved for launch.",
+            "next_review_date": "2026-09-30",
+        },
+    )
+
+    assert response.status_code == 409
+    assert "Missing evidence" in response.json()["detail"]
+
+
+def test_approval_succeeds_once_evidence_is_complete(client):
+    system = next(
+        s for s in client.get("/api/ai-governance/systems").json()
+        if s["name"] == "Medical Triage Risk Scorer"
+    )
+    gate = client.get(f"/api/ai-governance/systems/{system['id']}/launch-gate").json()
+
+    for item in gate["evidence_items"]:
+        if item["status"] == "missing":
+            response = client.patch(
+                f"/api/ai-governance/evidence/{item['id']}",
+                json={
+                    "status": "provided",
+                    "evidence_uri": f"trust://ai-evidence/medical/{item['requirement'].lower().replace(' ', '-')}",
+                    "notes": "Provided for launch approval.",
+                },
+            )
+            assert response.status_code == 200
+
+    response = client.patch(
+        f"/api/ai-governance/reviews/{gate['governance_review']['id']}/decision",
+        json={
+            "status": "approved",
+            "decision_summary": "Approved after evidence package completion.",
+            "next_review_date": "2026-09-30",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "approved"
 
 
 def test_public_trust_center(client):

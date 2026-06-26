@@ -1,8 +1,10 @@
+import { useNavigate } from "react-router-dom";
 import { api, type AIGovernanceReview, type ISO42001Control } from "../api";
 import { badgeClass } from "../badge";
 import { useApi } from "../useApi";
 
 export default function AIGovernance() {
+  const navigate = useNavigate();
   const summary = useApi(api.aiGovernanceSummary);
   const systems = useApi(api.aiSystems);
   const controls = useApi(api.iso42001Controls);
@@ -65,7 +67,17 @@ export default function AIGovernance() {
           </thead>
           <tbody>
             {(systems.data ?? []).map((system) => (
-              <tr key={system.id}>
+              <tr
+                className="clickable"
+                key={system.id}
+                tabIndex={0}
+                onClick={() => navigate(`/ai-governance/systems/${system.id}`)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    navigate(`/ai-governance/systems/${system.id}`);
+                  }
+                }}
+              >
                 <td>
                   <div className="control-key">{system.name}</div>
                   <div>{system.business_purpose}</div>

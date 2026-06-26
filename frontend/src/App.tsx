@@ -8,6 +8,7 @@ import AddVendor from "./pages/AddVendor";
 import Workflows from "./pages/Workflows";
 import WorkflowDetail from "./pages/WorkflowDetail";
 import AIGovernance from "./pages/AIGovernance";
+import AILaunchGate from "./pages/AILaunchGate";
 import TrustCenter from "./pages/TrustCenter";
 
 export default function App() {
@@ -45,6 +46,7 @@ export default function App() {
           <Route path="/workflows" element={<Workflows />} />
           <Route path="/workflows/:id" element={<WorkflowDetail />} />
           <Route path="/ai-governance" element={<AIGovernance />} />
+          <Route path="/ai-governance/systems/:id" element={<AILaunchGate />} />
           <Route path="/trust-center" element={<TrustCenter />} />
         </Routes>
       </main>

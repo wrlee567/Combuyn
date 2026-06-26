@@ -132,6 +132,10 @@ LIMITED_RISK_KEYS = {
     "synthetic_content_or_deepfake",
 }
 
+APPROVAL_STATUSES = {"approved", "approved with conditions"}
+EVIDENCE_READY_STATUSES = {"accepted", "provided"}
+EVIDENCE_ALLOWED_STATUSES = {"missing", "provided", "accepted", "rejected"}
+
 
 @dataclass(frozen=True)
 class ClassificationResult:
@@ -323,9 +327,219 @@ def create_classification_for_system(
                 **task_data,
             )
         )
+    sync_trust_center_transparency(db, org_id, system, classification)
     db.commit()
     db.refresh(classification)
     return AIClassificationOut.model_validate(classification)
+
+
+def build_launch_gate_payload(
+    db: Session,
+    org_id: uuid.UUID,
+    ai_system_id: uuid.UUID,
+):
+    """Assemble the per-system launch gate workspace."""
+    from app.schemas.ai_governance import (
+        AIClassificationOut,
+        AIComplianceTaskOut,
+        AILaunchGateOut,
+        AISystemOut,
+        TrustTransparencyOut,
+    )
+
+    system = db.scalar(
+        select(AISystemInventory)
+        .where(AISystemInventory.id == ai_system_id, AISystemInventory.org_id == org_id)
+        .options(selectinload(AISystemInventory.classifications))
+    )
+    if system is None:
+        return None
+
+    classification = latest_classification(system)
+    transparency = (
+        sync_trust_center_transparency(db, org_id, system, classification)
+        if classification
+        else None
+    )
+
+    task_rows = db.execute(
+        select(AIComplianceTask, AISystemInventory.name)
+        .join(AISystemInventory, AISystemInventory.id == AIComplianceTask.ai_system_id)
+        .where(
+            AIComplianceTask.org_id == org_id,
+            AIComplianceTask.ai_system_id == system.id,
+        )
+        .order_by(AIComplianceTask.created_at)
+    )
+    tasks = [
+        AIComplianceTaskOut.model_validate(task).model_copy(
+            update={"system_name": system_name}
+        )
+        for task, system_name in task_rows
+    ]
+
+    guardrails = _guardrail_for_system(db, org_id, system)
+    impact_assessment = _impact_assessment_for_system(db, org_id, system)
+    review = _latest_review_for_system(db, org_id, system)
+    evidence_items = _evidence_out(review.evidence_items if review else [])
+    review_out = _review_out(review, system.name, evidence_items) if review else None
+    readiness = _readiness(tasks, guardrails, review_out, evidence_items)
+
+    system_out = AISystemOut.model_validate(system)
+    system_out.latest_classification = (
+        AIClassificationOut.model_validate(classification) if classification else None
+    )
+
+    db.flush()
+    return AILaunchGateOut(
+        system=system_out,
+        latest_classification=system_out.latest_classification,
+        tasks=tasks,
+        guardrails=guardrails,
+        impact_assessment=impact_assessment,
+        governance_review=review_out,
+        evidence_items=evidence_items,
+        trust_center_transparency=(
+            TrustTransparencyOut.model_validate(transparency) if transparency else None
+        ),
+        readiness=readiness,
+    )
+
+
+def update_evidence_item(
+    db: Session,
+    org_id: uuid.UUID,
+    evidence_id: uuid.UUID,
+    *,
+    status: str | None = None,
+    evidence_uri: str | None = None,
+    notes: str | None = None,
+):
+    """Update review evidence after checking tenant ownership and status validity."""
+    from app.schemas.ai_governance import AIEvidenceItemOut
+
+    if status is not None and status not in EVIDENCE_ALLOWED_STATUSES:
+        raise ValueError("Invalid evidence status")
+
+    evidence = db.scalar(
+        select(AIEvidenceItem)
+        .join(AIGovernanceReview, AIGovernanceReview.id == AIEvidenceItem.review_id)
+        .where(
+            AIEvidenceItem.id == evidence_id,
+            AIEvidenceItem.org_id == org_id,
+            AIGovernanceReview.org_id == org_id,
+        )
+    )
+    if evidence is None:
+        return None
+
+    if status is not None:
+        evidence.status = status
+    if evidence_uri is not None:
+        evidence.evidence_uri = evidence_uri
+    if notes is not None:
+        evidence.notes = notes
+
+    db.commit()
+    db.refresh(evidence)
+    return AIEvidenceItemOut.model_validate(evidence)
+
+
+def update_review_decision(
+    db: Session,
+    org_id: uuid.UUID,
+    review_id: uuid.UUID,
+    *,
+    status: str,
+    decision_summary: str,
+    next_review_date: date | None,
+):
+    """Update a governance review decision and enforce launch approval readiness."""
+    review = db.scalar(
+        select(AIGovernanceReview)
+        .where(AIGovernanceReview.id == review_id, AIGovernanceReview.org_id == org_id)
+        .options(selectinload(AIGovernanceReview.evidence_items))
+    )
+    if review is None:
+        return None
+
+    if status in APPROVAL_STATUSES:
+        blockers = approval_blockers(review.evidence_items)
+        if blockers:
+            raise ValueError("; ".join(blockers))
+
+    review.status = status
+    review.decision_summary = decision_summary
+    review.next_review_date = next_review_date
+
+    system_name = db.scalar(
+        select(AISystemInventory.name).where(
+            AISystemInventory.id == review.ai_system_id,
+            AISystemInventory.org_id == org_id,
+        )
+    ) or ""
+
+    db.commit()
+    db.refresh(review)
+    return _review_out(review, system_name, _evidence_out(review.evidence_items))
+
+
+def approval_blockers(evidence_items: list[AIEvidenceItem]) -> list[str]:
+    """Return evidence blockers that prevent launch approval."""
+    missing = [item.requirement for item in evidence_items if item.status == "missing"]
+    rejected = [item.requirement for item in evidence_items if item.status == "rejected"]
+    blockers: list[str] = []
+    if missing:
+        blockers.append(f"Missing evidence: {', '.join(sorted(missing))}")
+    if rejected:
+        blockers.append(f"Rejected evidence: {', '.join(sorted(rejected))}")
+    return blockers
+
+
+def sync_trust_center_transparency(
+    db: Session,
+    org_id: uuid.UUID,
+    system: AISystemInventory,
+    classification: AIRiskClassification | None,
+) -> TrustCenterAITransparencyMetric:
+    """Create or update the public Trust Center AI transparency row."""
+    answers = classification.questionnaire_answers if classification else {}
+    direct_user_interaction = bool(answers.get("direct_user_interaction"))
+    biometric_data = bool(answers.get("biometric_categorization_or_emotion"))
+    synthetic_content = bool(answers.get("synthetic_content_or_deepfake"))
+    deepfake_generation = bool(answers.get("synthetic_content_or_deepfake"))
+    notice_required = direct_user_interaction or biometric_data or synthetic_content
+
+    metric = db.scalar(
+        select(TrustCenterAITransparencyMetric).where(
+            TrustCenterAITransparencyMetric.org_id == org_id,
+            TrustCenterAITransparencyMetric.ai_system_id == system.id,
+        )
+    )
+    if metric is None:
+        metric = db.scalar(
+            select(TrustCenterAITransparencyMetric).where(
+                TrustCenterAITransparencyMetric.org_id == org_id,
+                TrustCenterAITransparencyMetric.system_name == system.name,
+            )
+        )
+    if metric is None:
+        metric = TrustCenterAITransparencyMetric(
+            org_id=org_id,
+            ai_system_id=system.id,
+            system_name=system.name,
+        )
+        db.add(metric)
+
+    metric.ai_system_id = system.id
+    metric.system_name = system.name
+    metric.direct_user_interaction = direct_user_interaction
+    metric.biometric_data = biometric_data
+    metric.synthetic_content = synthetic_content
+    metric.deepfake_generation = deepfake_generation
+    metric.eu_transparency_notice = "required" if notice_required else "not_required"
+    metric.public_summary = system.business_purpose
+    return metric
 
 
 def list_ai_compliance_tasks(db: Session, org_id: uuid.UUID):
@@ -402,7 +616,7 @@ def list_ai_impact_assessments(db: Session, org_id: uuid.UUID):
 
 def list_ai_governance_reviews(db: Session, org_id: uuid.UUID):
     """List governance reviews with sorted evidence and readiness counts."""
-    from app.schemas.ai_governance import AIEvidenceItemOut, AIGovernanceReviewOut
+    from app.schemas.ai_governance import AIGovernanceReviewOut
 
     stmt = (
         select(AIGovernanceReview, AISystemInventory.name)
@@ -413,23 +627,175 @@ def list_ai_governance_reviews(db: Session, org_id: uuid.UUID):
     )
     reviews: list[AIGovernanceReviewOut] = []
     for review, system_name in db.execute(stmt):
-        evidence = [
-            AIEvidenceItemOut.model_validate(item)
-            for item in sorted(review.evidence_items, key=lambda item: item.requirement)
-        ]
-        ready = sum(1 for item in evidence if item.status in {"accepted", "provided"})
-        missing = sum(1 for item in evidence if item.status == "missing")
-        reviews.append(
-            AIGovernanceReviewOut.model_validate(review).model_copy(
-                update={
-                    "system_name": system_name,
-                    "evidence_items": evidence,
-                    "evidence_ready": ready,
-                    "evidence_missing": missing,
-                }
-            )
-        )
+        reviews.append(_review_out(review, system_name, _evidence_out(review.evidence_items)))
     return reviews
+
+
+def _evidence_out(evidence_items: list[AIEvidenceItem]):
+    from app.schemas.ai_governance import AIEvidenceItemOut
+
+    return [
+        AIEvidenceItemOut.model_validate(item)
+        for item in sorted(evidence_items, key=lambda item: item.requirement)
+    ]
+
+
+def _review_out(review: AIGovernanceReview, system_name: str, evidence):
+    from app.schemas.ai_governance import AIGovernanceReviewOut
+
+    ready = sum(1 for item in evidence if item.status in EVIDENCE_READY_STATUSES)
+    missing = sum(1 for item in evidence if item.status == "missing")
+    return AIGovernanceReviewOut.model_validate(review).model_copy(
+        update={
+            "system_name": system_name,
+            "evidence_items": evidence,
+            "evidence_ready": ready,
+            "evidence_missing": missing,
+        }
+    )
+
+
+def _latest_review_for_system(
+    db: Session, org_id: uuid.UUID, system: AISystemInventory
+) -> AIGovernanceReview | None:
+    return db.scalar(
+        select(AIGovernanceReview)
+        .where(
+            AIGovernanceReview.org_id == org_id,
+            AIGovernanceReview.ai_system_id == system.id,
+        )
+        .options(selectinload(AIGovernanceReview.evidence_items))
+        .order_by(AIGovernanceReview.created_at.desc())
+    )
+
+
+def _impact_assessment_for_system(db: Session, org_id: uuid.UUID, system: AISystemInventory):
+    from app.schemas.ai_governance import AIImpactAssessmentOut
+
+    impact = db.scalar(
+        select(AIImpactAssessment)
+        .where(
+            AIImpactAssessment.org_id == org_id,
+            AIImpactAssessment.ai_system_id == system.id,
+        )
+        .order_by(AIImpactAssessment.created_at.desc())
+    )
+    if impact is None:
+        return None
+    return AIImpactAssessmentOut.model_validate(impact).model_copy(
+        update={"system_name": system.name}
+    )
+
+
+def _guardrail_for_system(db: Session, org_id: uuid.UUID, system: AISystemInventory):
+    from app.schemas.ai_governance import GuardrailOut
+
+    row = db.execute(
+        select(AIDataPrivacyGuardrail, AIInfrastructureValidationCheck)
+        .join(
+            AIInfrastructureValidationCheck,
+            AIInfrastructureValidationCheck.ai_system_id
+            == AIDataPrivacyGuardrail.ai_system_id,
+        )
+        .where(
+            AIDataPrivacyGuardrail.org_id == org_id,
+            AIDataPrivacyGuardrail.ai_system_id == system.id,
+            AIInfrastructureValidationCheck.org_id == org_id,
+        )
+    ).first()
+    if row is None:
+        return None
+    privacy, infra = row
+    return GuardrailOut(
+        ai_system_id=system.id,
+        system_name=system.name,
+        privacy_status=privacy.status,
+        customer_data_training_blocked=privacy.customer_data_training_blocked,
+        prompt_completion_training_blocked=privacy.prompt_completion_training_blocked,
+        retention_policy=privacy.retention_policy,
+        infrastructure_status=infra.validation_status,
+        model_isolation_confirmed=infra.model_isolation_confirmed,
+        encryption_at_rest=infra.encryption_at_rest,
+        encryption_in_transit=infra.encryption_in_transit,
+        private_network_path=infra.private_network_path,
+        network_path_type=infra.network_path_type,
+    )
+
+
+def _readiness(tasks, guardrails, review, evidence_items):
+    from app.schemas.ai_governance import LaunchGateReadiness
+
+    evidence_total = len(evidence_items)
+    evidence_ready = sum(
+        1 for item in evidence_items if item.status in EVIDENCE_READY_STATUSES
+    )
+    evidence_missing = sum(1 for item in evidence_items if item.status == "missing")
+    evidence_rejected = sum(1 for item in evidence_items if item.status == "rejected")
+
+    guardrail_checks = []
+    if guardrails is not None:
+        guardrail_checks = [
+            guardrails.privacy_status == "passing",
+            guardrails.infrastructure_status == "passing",
+            guardrails.customer_data_training_blocked,
+            guardrails.prompt_completion_training_blocked,
+            guardrails.model_isolation_confirmed,
+            guardrails.encryption_at_rest,
+            guardrails.encryption_in_transit,
+            guardrails.private_network_path,
+        ]
+    guardrails_total = len(guardrail_checks)
+    guardrails_passing = sum(1 for passed in guardrail_checks if passed)
+
+    task_done_statuses = {"done", "complete", "completed", "closed"}
+    tasks_total = len(tasks)
+    tasks_complete = sum(1 for task in tasks if task.status in task_done_statuses)
+
+    review_status = review.status if review else ""
+    review_points = 100 if review_status in APPROVAL_STATUSES else 60 if review else 0
+    evidence_points = (
+        round((evidence_ready / evidence_total) * 100) if evidence_total else 0
+    )
+    guardrail_points = (
+        round((guardrails_passing / guardrails_total) * 100) if guardrails_total else 0
+    )
+    task_points = round((tasks_complete / tasks_total) * 100) if tasks_total else 100
+    score = round(
+        evidence_points * 0.45
+        + guardrail_points * 0.25
+        + task_points * 0.15
+        + review_points * 0.15
+    )
+
+    blockers = []
+    if evidence_missing:
+        blockers.append("Missing evidence must be provided before approval.")
+    if evidence_rejected:
+        blockers.append("Rejected evidence must be remediated before approval.")
+    if guardrails_total and guardrails_passing < guardrails_total:
+        blockers.append("All privacy and deployment guardrails must pass.")
+    if review_status in APPROVAL_STATUSES:
+        state = "approved"
+    elif blockers:
+        state = "blocked"
+    elif evidence_total and evidence_ready == evidence_total:
+        state = "ready"
+    else:
+        state = "in_review"
+
+    return LaunchGateReadiness(
+        score=score,
+        state=state,
+        evidence_ready=evidence_ready,
+        evidence_total=evidence_total,
+        evidence_missing=evidence_missing,
+        evidence_rejected=evidence_rejected,
+        guardrails_passing=guardrails_passing,
+        guardrails_total=guardrails_total,
+        tasks_complete=tasks_complete,
+        tasks_total=tasks_total,
+        approval_blockers=blockers,
+    )
 
 
 def list_medical_ai_risks(db: Session, org_id: uuid.UUID):
