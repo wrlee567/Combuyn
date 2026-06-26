@@ -301,10 +301,10 @@ def seed_ai_demo(db: Session) -> dict[str, int]:
                 next_review = date.today() - timedelta(days=10)
                 decision = "Approved for private endpoint use with quarterly evidence refresh and provider documentation review."
             else:
-                status = "pending evidence"
+                status = "ready for approval"
                 risk_level = "medium"
                 next_review = date.today() + timedelta(days=30)
-                decision = "Transparency notice and evaluation record must be accepted before general availability."
+                decision = "Evidence package is ready for AI Governance Council approval."
 
             review = AIGovernanceReview(
                 ai_system_id=system.id,
@@ -339,14 +339,14 @@ def seed_ai_demo(db: Session) -> dict[str, int]:
                 "Human oversight",
                 "procedure",
                 f"{system.name} human oversight procedure",
-                "provided" if system.lifecycle_stage == "deployed" else "missing",
+                "provided" if not system.medical_device_related else "missing",
                 "Reviewer roles, override path, and escalation workflow.",
             ),
             (
                 "Transparency notice",
                 "notice",
                 f"{system.name} user and customer notice",
-                "accepted" if system.lifecycle_stage == "deployed" else "missing",
+                "accepted" if not system.medical_device_related else "missing",
                 "EU AI Act notice and customer-facing disclosure package.",
             ),
         ]

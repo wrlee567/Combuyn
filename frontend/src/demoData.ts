@@ -5,6 +5,7 @@ import type {
   AIGovernanceSummary,
   AIGovernanceReview,
   AIGuardrail,
+  AILaunchGate,
   AIComplianceTask,
   AIImpactAssessment,
   AISystem,
@@ -278,7 +279,7 @@ export const demoAIGovernanceSummary: AIGovernanceSummary = {
   passing_guardrails: 6,
   trust_center_frameworks: 5,
   evidence_items: 12,
-  missing_evidence: 5,
+  missing_evidence: 3,
   overdue_reviews: 1,
 };
 
@@ -569,14 +570,13 @@ export const demoAIReviews: AIGovernanceReview[] = [
     system_name: "Vendor Risk Copilot",
     review_name: "Vendor Risk Copilot deployment readiness",
     review_type: "deployment readiness",
-    status: "pending evidence",
+    status: "ready for approval",
     risk_level: "medium",
     reviewer: "AI Governance Council",
-    decision_summary:
-      "Transparency notice and evaluation record must be accepted before general availability.",
+    decision_summary: "Evidence package is ready for AI Governance Council approval.",
     next_review_date: "2026-07-17",
-    evidence_ready: 2,
-    evidence_missing: 2,
+    evidence_ready: 4,
+    evidence_missing: 0,
     evidence_items: [
       {
         id: "review-demo-3-evidence-1",
@@ -603,9 +603,9 @@ export const demoAIReviews: AIGovernanceReview[] = [
         requirement: "Human oversight",
         evidence_type: "procedure",
         title: "Vendor Risk Copilot human oversight procedure",
-        evidence_uri: "",
+        evidence_uri: "trust://ai-evidence/vendor-risk-copilot/human-oversight",
         owner: "GRC Automation",
-        status: "missing",
+        status: "provided",
         notes: "Reviewer roles, override path, and escalation workflow.",
       },
       {
@@ -613,9 +613,9 @@ export const demoAIReviews: AIGovernanceReview[] = [
         requirement: "Transparency notice",
         evidence_type: "notice",
         title: "Vendor Risk Copilot user and customer notice",
-        evidence_uri: "",
+        evidence_uri: "trust://ai-evidence/vendor-risk-copilot/transparency-notice",
         owner: "GRC Automation",
-        status: "missing",
+        status: "accepted",
         notes: "EU AI Act notice and customer-facing disclosure package.",
       },
     ],
@@ -710,6 +710,7 @@ export const demoTrustCenter: TrustCenter = {
   ],
   ai_transparency: demoAISystems.map((system) => ({
     id: `trust-${system.id}`,
+    ai_system_id: system.id,
     system_name: system.name,
     direct_user_interaction: system.name === "Vendor Risk Copilot",
     biometric_data: false,
@@ -749,3 +750,79 @@ export const demoTrustCenter: TrustCenter = {
     },
   ],
 };
+
+export function demoLaunchGate(id: string): AILaunchGate {
+  const system = demoAISystems.find((candidate) => candidate.id === id) ?? demoAISystems[0];
+  const review =
+    demoAIReviews.find((candidate) => candidate.ai_system_id === system.id) ?? null;
+  const guardrails =
+    demoGuardrails.find((candidate) => candidate.ai_system_id === system.id) ?? null;
+  const impact =
+    demoImpactAssessments.find((candidate) => candidate.ai_system_id === system.id) ??
+    null;
+  const evidence = review?.evidence_items ?? [];
+  const transparency =
+    demoTrustCenter.ai_transparency.find(
+      (candidate) => candidate.ai_system_id === system.id,
+    ) ?? null;
+  const tasks = demoTasks.filter((task) => task.ai_system_id === system.id);
+  const evidenceReady = evidence.filter((item) =>
+    ["accepted", "provided"].includes(item.status),
+  ).length;
+  const evidenceMissing = evidence.filter((item) => item.status === "missing").length;
+  const evidenceRejected = evidence.filter((item) => item.status === "rejected").length;
+  const guardrailChecks = guardrails
+    ? [
+        guardrails.privacy_status === "passing",
+        guardrails.infrastructure_status === "passing",
+        guardrails.customer_data_training_blocked,
+        guardrails.prompt_completion_training_blocked,
+        guardrails.model_isolation_confirmed,
+        guardrails.encryption_at_rest,
+        guardrails.encryption_in_transit,
+        guardrails.private_network_path,
+      ]
+    : [];
+  const guardrailsPassing = guardrailChecks.filter(Boolean).length;
+  const reviewApproved =
+    review !== null && ["approved", "approved with conditions"].includes(review.status);
+  const state = reviewApproved
+    ? "approved"
+    : evidenceMissing > 0 || evidenceRejected > 0
+      ? "blocked"
+      : evidence.length > 0 && evidenceReady === evidence.length
+        ? "ready"
+        : "in_review";
+  const evidencePoints = evidence.length ? Math.round((evidenceReady / evidence.length) * 100) : 0;
+  const guardrailPoints = guardrailChecks.length
+    ? Math.round((guardrailsPassing / guardrailChecks.length) * 100)
+    : 0;
+  const reviewPoints = reviewApproved ? 100 : review ? 60 : 0;
+
+  return {
+    system,
+    latest_classification: system.latest_classification,
+    tasks,
+    guardrails,
+    impact_assessment: impact,
+    governance_review: review,
+    evidence_items: evidence,
+    trust_center_transparency: transparency,
+    readiness: {
+      score: Math.round(evidencePoints * 0.45 + guardrailPoints * 0.25 + reviewPoints * 0.15 + 15),
+      state,
+      evidence_ready: evidenceReady,
+      evidence_total: evidence.length,
+      evidence_missing: evidenceMissing,
+      evidence_rejected: evidenceRejected,
+      guardrails_passing: guardrailsPassing,
+      guardrails_total: guardrailChecks.length,
+      tasks_complete: 0,
+      tasks_total: tasks.length,
+      approval_blockers: [
+        ...(evidenceMissing ? ["Missing evidence must be provided before approval."] : []),
+        ...(evidenceRejected ? ["Rejected evidence must be remediated before approval."] : []),
+      ],
+    },
+  };
+}

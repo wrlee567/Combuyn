@@ -204,6 +204,7 @@ class TrustFrameworkOut(ORMModel):
 
 class TrustTransparencyOut(ORMModel):
     id: uuid.UUID
+    ai_system_id: uuid.UUID | None = None
     system_name: str
     direct_user_interaction: bool
     biometric_data: bool
@@ -227,3 +228,53 @@ class TrustCenterOut(BaseModel):
     frameworks: list[TrustFrameworkOut]
     ai_transparency: list[TrustTransparencyOut]
     documents: list[TrustDocumentOut]
+
+
+class LaunchGateReadiness(BaseModel):
+    score: int
+    state: str
+    evidence_ready: int
+    evidence_total: int
+    evidence_missing: int
+    evidence_rejected: int
+    guardrails_passing: int
+    guardrails_total: int
+    tasks_complete: int
+    tasks_total: int
+    approval_blockers: list[str] = Field(default_factory=list)
+
+
+class AILaunchGateOut(BaseModel):
+    system: AISystemOut
+    latest_classification: AIClassificationOut | None
+    tasks: list[AIComplianceTaskOut]
+    guardrails: GuardrailOut | None
+    impact_assessment: AIImpactAssessmentOut | None
+    governance_review: AIGovernanceReviewOut | None
+    evidence_items: list[AIEvidenceItemOut]
+    trust_center_transparency: TrustTransparencyOut | None
+    readiness: LaunchGateReadiness
+
+
+class AIEvidencePatch(BaseModel):
+    status: str | None = None
+    evidence_uri: str | None = None
+    notes: str | None = None
+
+    @field_validator("status")
+    @classmethod
+    def _validate_status(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        allowed = {"missing", "provided", "accepted", "rejected"}
+        if value not in allowed:
+            raise ValueError(
+                f"Invalid evidence status. Allowed statuses: {', '.join(sorted(allowed))}"
+            )
+        return value
+
+
+class AIReviewDecisionPatch(BaseModel):
+    status: str
+    decision_summary: str
+    next_review_date: date | None = None
