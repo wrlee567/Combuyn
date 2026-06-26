@@ -21,6 +21,16 @@ body {
 
 a { color: inherit; text-decoration: none; }
 
+a:focus-visible,
+button:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+input:focus-visible,
+.clickable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .layout { display: flex; min-height: 100vh; }
 
 .sidebar {
@@ -136,6 +146,7 @@ th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: upp
 
 .clickable { cursor: pointer; }
 .clickable:hover td { background: var(--panel-2); }
+.clickable:focus-visible td { background: var(--panel-2); }
 
 .score-bar { background: var(--panel-2); border-radius: 6px; height: 8px; overflow: hidden; width: 120px; display: inline-block; vertical-align: middle; }
 .score-bar > span { display: block; height: 100%; background: var(--accent); }

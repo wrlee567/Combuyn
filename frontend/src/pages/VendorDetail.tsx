@@ -104,6 +104,7 @@ export default function VendorDetail() {
           <div className="k">Lifecycle phase</div>
           <div>
             <select
+              aria-label="Lifecycle phase"
               value={vendor.lifecycle_status}
               onChange={(e) => setLifecycle(e.target.value)}
             >
@@ -182,6 +183,7 @@ function QuestionInput({
   if (q.type === "boolean") {
     return (
       <select
+        aria-label={q.text}
         value={value === true ? "yes" : value === false ? "no" : ""}
         onChange={(e) =>
           onChange(e.target.value === "" ? null : e.target.value === "yes")
@@ -196,6 +198,7 @@ function QuestionInput({
   if (q.type === "single_select") {
     return (
       <select
+        aria-label={q.text}
         value={(value as string) ?? ""}
         onChange={(e) => onChange(e.target.value || null)}
       >
@@ -210,6 +213,7 @@ function QuestionInput({
   }
   return (
     <input
+      aria-label={q.text}
       value={(value as string) ?? ""}
       onChange={(e) => onChange(e.target.value)}
     />

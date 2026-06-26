@@ -7,6 +7,17 @@ export default function Vendors() {
   const { data, loading, error } = useApi(api.vendors);
   const navigate = useNavigate();
 
+  function openVendor(id: string) {
+    navigate(`/vendors/${id}`);
+  }
+
+  function onRowKey(e: React.KeyboardEvent, id: string) {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      openVendor(id);
+    }
+  }
+
   if (loading) return <div className="loading">Loading vendors…</div>;
   if (error) return <div className="error">API error: {error}</div>;
 
@@ -41,7 +52,11 @@ export default function Vendors() {
               <tr
                 key={v.id}
                 className="clickable"
-                onClick={() => navigate(`/vendors/${v.id}`)}
+                tabIndex={0}
+                role="link"
+                aria-label={`View ${v.name}`}
+                onClick={() => openVendor(v.id)}
+                onKeyDown={(e) => onRowKey(e, v.id)}
               >
                 <td>
                   <div style={{ fontWeight: 600 }}>{v.name}</div>

@@ -72,8 +72,9 @@ export default function AddVendor() {
 
   const Select = (key: keyof VendorCreate, label: string, list: string[]) => (
     <div className="field">
-      <label>{label}</label>
+      <label htmlFor={`vendor-${key}`}>{label}</label>
       <select
+        id={`vendor-${key}`}
         value={form[key] as string}
         onChange={(e) => set(key, e.target.value)}
       >
@@ -101,8 +102,9 @@ export default function AddVendor() {
       <form className="panel" onSubmit={submit}>
         <div className="form-grid">
           <div className="field full">
-            <label>Vendor name *</label>
+            <label htmlFor="vendor-name">Vendor name *</label>
             <input
+              id="vendor-name"
               required
               value={form.name}
               onChange={(e) => set("name", e.target.value)}
@@ -110,15 +112,18 @@ export default function AddVendor() {
             />
           </div>
           <div className="field">
-            <label>Contact name</label>
+            <label htmlFor="vendor-contact-name">Contact name</label>
             <input
+              id="vendor-contact-name"
               value={form.contact_name}
               onChange={(e) => set("contact_name", e.target.value)}
             />
           </div>
           <div className="field">
-            <label>Contact email</label>
+            <label htmlFor="vendor-contact-email">Contact email</label>
             <input
+              id="vendor-contact-email"
+              type="email"
               value={form.contact_email}
               onChange={(e) => set("contact_email", e.target.value)}
             />
@@ -141,8 +146,9 @@ export default function AddVendor() {
             options.lifecycle_phases
           )}
           <div className="field full">
-            <label>Description</label>
+            <label htmlFor="vendor-description">Description</label>
             <textarea
+              id="vendor-description"
               rows={2}
               value={form.description}
               onChange={(e) => set("description", e.target.value)}

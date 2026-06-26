@@ -462,9 +462,40 @@ async function readBody(res: Response, path: string): Promise<ResponseBody> {
 
 function detailFromJson(value: unknown): string | null {
   if (value && typeof value === "object" && "detail" in value) {
-    return String((value as { detail: unknown }).detail);
+    return formatApiDetail((value as { detail: unknown }).detail);
   }
   return null;
+}
+
+function formatApiDetail(detail: unknown): string {
+  if (typeof detail === "string") {
+    return detail;
+  }
+
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (item && typeof item === "object" && "msg" in item) {
+          const loc =
+            "loc" in item && Array.isArray((item as { loc: unknown }).loc)
+              ? ` (${(item as { loc: unknown[] }).loc.join(".")})`
+              : "";
+          return `${String((item as { msg: unknown }).msg)}${loc}`;
+        }
+        return formatApiDetail(item);
+      })
+      .join("; ");
+  }
+
+  if (detail && typeof detail === "object") {
+    try {
+      return JSON.stringify(detail);
+    } catch {
+      return String(detail);
+    }
+  }
+
+  return String(detail);
 }
 
 function nonJsonMessage(path: string, status: number, body: ResponseBody): string {

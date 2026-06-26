@@ -52,6 +52,13 @@ export default function Workflows() {
 
   const defName = (id: string) =>
     defs.find((d) => d.id === id)?.name ?? "Workflow";
+  const openWorkflow = (id: string) => navigate(`/workflows/${id}`);
+  const onRowKey = (e: React.KeyboardEvent, id: string) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      openWorkflow(id);
+    }
+  };
 
   return (
     <>
@@ -100,7 +107,11 @@ export default function Workflows() {
               <tr
                 key={i.id}
                 className="clickable"
-                onClick={() => navigate(`/workflows/${i.id}`)}
+                tabIndex={0}
+                role="link"
+                aria-label={`View ${i.subject}`}
+                onClick={() => openWorkflow(i.id)}
+                onKeyDown={(e) => onRowKey(e, i.id)}
               >
                 <td style={{ fontWeight: 600 }}>{i.subject}</td>
                 <td className="muted">{defName(i.definition_id)}</td>
