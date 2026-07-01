@@ -133,8 +133,107 @@ LIMITED_RISK_KEYS = {
 }
 
 APPROVAL_STATUSES = {"approved", "approved with conditions"}
-EVIDENCE_READY_STATUSES = {"accepted", "provided"}
+EVIDENCE_READY_STATUSES = {"accepted"}
 EVIDENCE_ALLOWED_STATUSES = {"missing", "provided", "accepted", "rejected"}
+
+
+PACKET_TEMPLATES = {
+    "risk assessment": {
+        "source_framework": "NIST AI RMF / ISO/IEC 42001 A.5",
+        "regulatory_driver": "Material AI risks must be identified, assessed, treated, and approved before launch.",
+        "implementation_steps": [
+            "Confirm the intended use, affected users, lifecycle stage, and residual risk.",
+            "Map known harms, misuse paths, operational controls, and escalation owners.",
+            "Record approval assumptions and open risks in the impact assessment.",
+        ],
+        "evidence_requirements": [
+            "Completed impact assessment",
+            "Risk treatment record",
+            "Reviewer decision or residual-risk acceptance",
+        ],
+        "acceptance_criteria": [
+            "Assessment covers the current system version and launch scope.",
+            "Residual risk is approved by the named reviewer.",
+            "Open risks have owners and review cadence.",
+        ],
+    },
+    "data governance": {
+        "source_framework": "EU AI Act high-risk controls / ISO/IEC 42001 A.7",
+        "regulatory_driver": "Training, validation, test, input, and operational data must be fit for purpose and protected.",
+        "implementation_steps": [
+            "Document data sources, licenses, lineage, and transformation boundaries.",
+            "Confirm customer data, prompts, and completions are excluded from provider training where required.",
+            "Validate retention, access control, quality, bias, and representativeness checks.",
+        ],
+        "evidence_requirements": [
+            "Data provenance record",
+            "Training exclusion or retention attestation",
+            "Data quality and protection review",
+        ],
+        "acceptance_criteria": [
+            "Evidence identifies all regulated or sensitive data classes.",
+            "Training and retention boundaries match the launch architecture.",
+            "Reviewer accepts data quality and protection controls.",
+        ],
+    },
+    "human oversight": {
+        "source_framework": "EU AI Act Article 14 / ISO/IEC 42001 A.9.3",
+        "regulatory_driver": "Human operators must be able to understand, supervise, override, and escalate AI outputs.",
+        "implementation_steps": [
+            "Assign accountable operators and reviewer roles.",
+            "Document override, escalation, logging, and fallback procedures.",
+            "Validate that users receive instructions for appropriate use and limitations.",
+        ],
+        "evidence_requirements": [
+            "Human oversight procedure",
+            "Operator instructions",
+            "Escalation and override record",
+        ],
+        "acceptance_criteria": [
+            "Named owners can intervene before harmful use or release.",
+            "Override and escalation paths are tested or attested.",
+            "Procedure aligns to the classified risk tier and role.",
+        ],
+    },
+    "transparency notice": {
+        "source_framework": "EU AI Act Article 50 / ISO/IEC 42001 A.8",
+        "regulatory_driver": "People must receive clear notice when AI interaction, synthetic content, or other transparency-triggering uses apply.",
+        "implementation_steps": [
+            "Confirm whether direct interaction, biometric use, or synthetic content triggers notice obligations.",
+            "Publish user-facing and customer-facing notice text for the launch scope.",
+            "Link notice evidence to the Trust Center or product disclosure location.",
+        ],
+        "evidence_requirements": [
+            "Transparency notice",
+            "Content labeling or user disclosure",
+            "Trust Center reference",
+        ],
+        "acceptance_criteria": [
+            "Notice explains the AI use in plain operational terms.",
+            "Disclosure is available before or during affected user interaction.",
+            "Reviewer accepts the notice as aligned to classification answers.",
+        ],
+    },
+    "medical ai validation": {
+        "source_framework": "Medical AI validation / NIST AI RMF Measure",
+        "regulatory_driver": "Medical AI systems require validation evidence before production use in regulated clinical workflows.",
+        "implementation_steps": [
+            "Lock validation protocol, dataset split strategy, and clinical representativeness assumptions.",
+            "Review SOUP supplier documentation, model behavior risks, and human clinical override controls.",
+            "Record validation results and post-market monitoring triggers.",
+        ],
+        "evidence_requirements": [
+            "Clinical validation protocol and results",
+            "SOUP supplier evidence",
+            "Post-market monitoring plan",
+        ],
+        "acceptance_criteria": [
+            "Validation protocol matches the intended medical workflow.",
+            "Dataset split, leakage, and representativeness risks are addressed.",
+            "Clinical owner accepts residual risk and monitoring plan.",
+        ],
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -406,6 +505,88 @@ def build_launch_gate_payload(
     )
 
 
+def build_implementation_packets(
+    db: Session,
+    org_id: uuid.UUID,
+    review_id: uuid.UUID,
+):
+    """Return active implementation packets for incomplete review requirements."""
+    from app.schemas.ai_governance import AIImplementationPacketOut
+
+    review = db.scalar(
+        select(AIGovernanceReview)
+        .where(AIGovernanceReview.id == review_id, AIGovernanceReview.org_id == org_id)
+        .options(
+            selectinload(AIGovernanceReview.ai_system).selectinload(
+                AISystemInventory.classifications
+            ),
+            selectinload(AIGovernanceReview.evidence_items),
+        )
+    )
+    if review is None:
+        return None
+
+    system = review.ai_system
+    classification = latest_classification(system)
+    tasks = list(
+        db.scalars(
+            select(AIComplianceTask)
+            .where(
+                AIComplianceTask.org_id == org_id,
+                AIComplianceTask.ai_system_id == system.id,
+            )
+            .order_by(AIComplianceTask.created_at)
+        )
+    )
+    guardrails = _guardrail_for_system(db, org_id, system)
+    impact_assessment = _impact_assessment_for_system(db, org_id, system)
+    medical_risk = db.scalar(
+        select(MedicalAIAlgorithmicRiskAssessment)
+        .where(
+            MedicalAIAlgorithmicRiskAssessment.org_id == org_id,
+            MedicalAIAlgorithmicRiskAssessment.ai_system_id == system.id,
+        )
+        .order_by(MedicalAIAlgorithmicRiskAssessment.created_at.desc())
+    )
+
+    packets: list[AIImplementationPacketOut] = []
+    for evidence in sorted(review.evidence_items, key=lambda item: item.requirement):
+        if _evidence_launch_ready(evidence):
+            continue
+        template = _packet_template(
+            evidence.requirement,
+            classification=classification,
+            tasks=tasks,
+            guardrails=guardrails,
+            impact_assessment=impact_assessment,
+            medical_risk=medical_risk,
+        )
+        status = _packet_status(evidence)
+        packets.append(
+            AIImplementationPacketOut(
+                id=f"packet-{evidence.id}",
+                review_id=review.id,
+                evidence_id=evidence.id,
+                requirement_name=evidence.requirement,
+                source_framework=template["source_framework"],
+                regulatory_driver=template["regulatory_driver"],
+                implementation_steps=template["implementation_steps"],
+                evidence_requirements=template["evidence_requirements"],
+                owner=evidence.owner or system.owner,
+                due_date=review.next_review_date,
+                review_cadence=_review_cadence(review),
+                status=status,
+                evidence_status=evidence.status,
+                evidence_uri=evidence.evidence_uri,
+                acceptance_criteria=template["acceptance_criteria"],
+                current_evidence_title=evidence.title,
+                reviewer_decision=evidence.reviewer_decision,
+                reviewer_notes=evidence.reviewer_notes,
+            )
+        )
+    return packets
+
+
 def update_evidence_item(
     db: Session,
     org_id: uuid.UUID,
@@ -413,6 +594,8 @@ def update_evidence_item(
     *,
     status: str | None = None,
     evidence_uri: str | None = None,
+    reviewer_decision: str | None = None,
+    reviewer_notes: str | None = None,
     notes: str | None = None,
 ):
     """Update review evidence after checking tenant ownership and status validity."""
@@ -420,6 +603,8 @@ def update_evidence_item(
 
     if status is not None and status not in EVIDENCE_ALLOWED_STATUSES:
         raise ValueError("Invalid evidence status")
+    if reviewer_decision not in {None, "", "waived"}:
+        raise ValueError("Invalid reviewer decision")
 
     evidence = db.scalar(
         select(AIEvidenceItem)
@@ -437,6 +622,10 @@ def update_evidence_item(
         evidence.status = status
     if evidence_uri is not None:
         evidence.evidence_uri = evidence_uri
+    if reviewer_decision is not None:
+        evidence.reviewer_decision = reviewer_decision
+    if reviewer_notes is not None:
+        evidence.reviewer_notes = reviewer_notes
     if notes is not None:
         evidence.notes = notes
 
@@ -486,11 +675,26 @@ def update_review_decision(
 
 def approval_blockers(evidence_items: list[AIEvidenceItem]) -> list[str]:
     """Return evidence blockers that prevent launch approval."""
-    missing = [item.requirement for item in evidence_items if item.status == "missing"]
-    rejected = [item.requirement for item in evidence_items if item.status == "rejected"]
+    missing = [
+        item.requirement
+        for item in evidence_items
+        if item.status == "missing" and not _evidence_launch_ready(item)
+    ]
+    provided = [
+        item.requirement
+        for item in evidence_items
+        if item.status == "provided" and not _evidence_launch_ready(item)
+    ]
+    rejected = [
+        item.requirement
+        for item in evidence_items
+        if item.status == "rejected" and not _evidence_launch_ready(item)
+    ]
     blockers: list[str] = []
     if missing:
         blockers.append(f"Missing evidence: {', '.join(sorted(missing))}")
+    if provided:
+        blockers.append(f"Evidence awaiting acceptance: {', '.join(sorted(provided))}")
     if rejected:
         blockers.append(f"Rejected evidence: {', '.join(sorted(rejected))}")
     return blockers
@@ -631,6 +835,105 @@ def list_ai_governance_reviews(db: Session, org_id: uuid.UUID):
     return reviews
 
 
+def _packet_template(
+    requirement: str,
+    *,
+    classification: AIRiskClassification | None,
+    tasks: list[AIComplianceTask],
+    guardrails,
+    impact_assessment,
+    medical_risk: MedicalAIAlgorithmicRiskAssessment | None,
+):
+    key = requirement.strip().lower()
+    template = PACKET_TEMPLATES.get(
+        key,
+        {
+            "source_framework": "AI governance launch gate",
+            "regulatory_driver": "The requirement is part of the AI launch review and must be proven before approval.",
+            "implementation_steps": [
+                "Confirm the requirement owner and launch scope.",
+                "Implement the control or process needed for the requirement.",
+                "Attach evidence and route it to the reviewer for acceptance.",
+            ],
+            "evidence_requirements": [
+                "Linked evidence URI",
+                "Owner attestation",
+                "Reviewer acceptance",
+            ],
+            "acceptance_criteria": [
+                "Evidence matches the current system and launch scope.",
+                "Owner and reviewer are recorded.",
+                "Reviewer marks the evidence accepted or waives it with notes.",
+            ],
+        },
+    )
+    implementation_steps = list(template["implementation_steps"])
+    evidence_requirements = list(template["evidence_requirements"])
+    acceptance_criteria = list(template["acceptance_criteria"])
+
+    if classification is not None:
+        acceptance_criteria.append(
+            f"Packet aligns to {classification.risk_tier} as {classification.actor_role}."
+        )
+    matching_task = _task_for_requirement(requirement, tasks)
+    if matching_task is not None:
+        implementation_steps.append(f"Close linked obligation: {matching_task.obligation}")
+        evidence_requirements.extend(matching_task.evidence_required)
+    if key == "data governance" and guardrails is not None:
+        evidence_requirements.append("Privacy guardrail attestation")
+    if key == "risk assessment" and impact_assessment is not None:
+        evidence_requirements.append("NIST AI RMF impact assessment record")
+    if key == "medical ai validation" and medical_risk is not None:
+        evidence_requirements.append("Medical algorithmic risk assessment")
+
+    return {
+        "source_framework": template["source_framework"],
+        "regulatory_driver": template["regulatory_driver"],
+        "implementation_steps": _dedupe(implementation_steps),
+        "evidence_requirements": _dedupe(evidence_requirements),
+        "acceptance_criteria": _dedupe(acceptance_criteria),
+    }
+
+
+def _task_for_requirement(
+    requirement: str, tasks: list[AIComplianceTask]
+) -> AIComplianceTask | None:
+    words = {word for word in requirement.lower().replace("-", " ").split() if word}
+    for task in tasks:
+        evidence_text = " ".join(task.evidence_required).lower()
+        obligation_text = task.obligation.lower()
+        if words and any(word in evidence_text or word in obligation_text for word in words):
+            return task
+    return None
+
+
+def _dedupe(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
+
+
+def _review_cadence(review: AIGovernanceReview) -> str:
+    if review.next_review_date is None:
+        return "Before launch and on material change"
+    return "By next review date and on material change"
+
+
+def _packet_status(evidence: AIEvidenceItem) -> str:
+    if evidence.reviewer_decision == "waived":
+        return "waived"
+    return evidence.status
+
+
+def _evidence_launch_ready(evidence: AIEvidenceItem) -> bool:
+    return evidence.status in EVIDENCE_READY_STATUSES or evidence.reviewer_decision == "waived"
+
+
 def _evidence_out(evidence_items: list[AIEvidenceItem]):
     from app.schemas.ai_governance import AIEvidenceItemOut
 
@@ -643,8 +946,12 @@ def _evidence_out(evidence_items: list[AIEvidenceItem]):
 def _review_out(review: AIGovernanceReview, system_name: str, evidence):
     from app.schemas.ai_governance import AIGovernanceReviewOut
 
-    ready = sum(1 for item in evidence if item.status in EVIDENCE_READY_STATUSES)
-    missing = sum(1 for item in evidence if item.status == "missing")
+    ready = sum(1 for item in evidence if item.status == "accepted" or item.reviewer_decision == "waived")
+    missing = sum(
+        1
+        for item in evidence
+        if item.status == "missing" and item.reviewer_decision != "waived"
+    )
     return AIGovernanceReviewOut.model_validate(review).model_copy(
         update={
             "system_name": system_name,
@@ -727,10 +1034,25 @@ def _readiness(tasks, guardrails, review, evidence_items):
 
     evidence_total = len(evidence_items)
     evidence_ready = sum(
-        1 for item in evidence_items if item.status in EVIDENCE_READY_STATUSES
+        1
+        for item in evidence_items
+        if item.status == "accepted" or item.reviewer_decision == "waived"
     )
-    evidence_missing = sum(1 for item in evidence_items if item.status == "missing")
-    evidence_rejected = sum(1 for item in evidence_items if item.status == "rejected")
+    evidence_missing = sum(
+        1
+        for item in evidence_items
+        if item.status == "missing" and item.reviewer_decision != "waived"
+    )
+    evidence_provided = sum(
+        1
+        for item in evidence_items
+        if item.status == "provided" and item.reviewer_decision != "waived"
+    )
+    evidence_rejected = sum(
+        1
+        for item in evidence_items
+        if item.status == "rejected" and item.reviewer_decision != "waived"
+    )
 
     guardrail_checks = []
     if guardrails is not None:
@@ -770,6 +1092,8 @@ def _readiness(tasks, guardrails, review, evidence_items):
     blockers = []
     if evidence_missing:
         blockers.append("Missing evidence must be provided before approval.")
+    if evidence_provided:
+        blockers.append("Provided evidence must be accepted or waived before approval.")
     if evidence_rejected:
         blockers.append("Rejected evidence must be remediated before approval.")
     if guardrails_total and guardrails_passing < guardrails_total:

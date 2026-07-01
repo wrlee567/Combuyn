@@ -362,6 +362,8 @@ class AIEvidenceItem(Base, TimestampMixin):
     evidence_uri: Mapped[str] = mapped_column(String(512), default="")
     owner: Mapped[str] = mapped_column(String(255), default="")
     status: Mapped[str] = mapped_column(String(64), default="missing")
+    reviewer_decision: Mapped[str] = mapped_column(String(64), default="")
+    reviewer_notes: Mapped[str] = mapped_column(Text, default="")
     notes: Mapped[str] = mapped_column(Text, default="")
 
     review: Mapped[AIGovernanceReview] = relationship(back_populates="evidence_items")

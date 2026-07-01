@@ -5,6 +5,7 @@ from __future__ import annotations
 from app.models.ccf import DEFAULT_ORG_ID
 from app.services.ai_governance import (
     build_ai_inventory_summary,
+    build_implementation_packets,
     build_launch_gate_payload,
     build_public_trust_center,
     list_ai_governance_reviews,
@@ -20,7 +21,7 @@ def test_ai_governance_service_assembles_dashboard_summary(db_session):
     assert summary.iso42001_controls == 38
     assert summary.high_risk_systems == 1
     assert summary.gpai_systems == 1
-    assert summary.evidence_items == 12
+    assert summary.evidence_items == 13
     assert summary.overdue_reviews == 1
 
 
@@ -44,7 +45,7 @@ def test_ai_governance_service_counts_review_evidence(db_session):
         if review.system_name == "Medical Triage Risk Scorer"
     )
     assert medical.evidence_ready == 1
-    assert medical.evidence_missing == 3
+    assert medical.evidence_missing == 4
     assert [item.requirement for item in medical.evidence_items] == sorted(
         item.requirement for item in medical.evidence_items
     )
@@ -89,7 +90,7 @@ def test_missing_evidence_blocks_launch_approval_service(db_session):
 
     assert gate is not None
     assert gate.readiness.state == "blocked"
-    assert gate.readiness.evidence_missing == 3
+    assert gate.readiness.evidence_missing == 4
     assert gate.readiness.approval_blockers
 
 
@@ -114,8 +115,12 @@ def test_evidence_updates_change_launch_gate_readiness_counts(client):
     updated_gate = client.get(
         f"/api/ai-governance/systems/{system['id']}/launch-gate"
     ).json()
-    assert updated_gate["readiness"]["evidence_ready"] == 2
-    assert updated_gate["readiness"]["evidence_missing"] == 2
+    assert updated_gate["readiness"]["evidence_ready"] == 1
+    assert updated_gate["readiness"]["evidence_missing"] == 3
+    assert any(
+        "accepted or waived" in blocker
+        for blocker in updated_gate["readiness"]["approval_blockers"]
+    )
 
 
 def test_trust_center_sync_reflects_transparency_classification_answers(db_session):
@@ -157,7 +162,7 @@ def test_ai_governance_summary_counts(client):
     assert summary["high_risk_systems"] == 1
     assert summary["gpai_systems"] == 1
     assert summary["open_tasks"] >= 1
-    assert summary["evidence_items"] == 12
+    assert summary["evidence_items"] == 13
     assert summary["missing_evidence"] >= 1
     assert summary["overdue_reviews"] == 1
 
@@ -224,7 +229,7 @@ def test_guardrails_and_medical_risk_are_exposed(client):
 def test_governance_reviews_expose_evidence_register(client):
     reviews = client.get("/api/ai-governance/reviews").json()
     assert len(reviews) == 3
-    assert all(len(review["evidence_items"]) == 4 for review in reviews)
+    assert all(len(review["evidence_items"]) >= 4 for review in reviews)
     assert any(review["status"] == "approved with conditions" for review in reviews)
     assert any(review["evidence_missing"] > 0 for review in reviews)
 
@@ -238,6 +243,119 @@ def test_governance_reviews_expose_evidence_register(client):
         item["requirement"] == "Data governance" and item["status"] == "missing"
         for item in medical["evidence_items"]
     )
+    assert any(
+        item["requirement"] == "Medical AI validation" and item["status"] == "missing"
+        for item in medical["evidence_items"]
+    )
+
+
+def test_implementation_packets_are_generated_for_missing_review_evidence(db_session):
+    with db_session() as db:
+        reviews = list_ai_governance_reviews(db, DEFAULT_ORG_ID)
+        medical = next(
+            review
+            for review in reviews
+            if review.system_name == "Medical Triage Risk Scorer"
+        )
+        packets = build_implementation_packets(db, DEFAULT_ORG_ID, medical.id)
+
+    assert packets is not None
+    assert {packet.requirement_name for packet in packets} == {
+        "Data governance",
+        "Human oversight",
+        "Medical AI validation",
+        "Transparency notice",
+    }
+    data_packet = next(packet for packet in packets if packet.requirement_name == "Data governance")
+    assert data_packet.status == "missing"
+    assert data_packet.owner == "Medical Device Engineering"
+    assert data_packet.implementation_steps
+    assert data_packet.evidence_requirements
+    assert data_packet.acceptance_criteria
+
+
+def test_implementation_packet_status_reflects_evidence_status(client):
+    review = next(
+        r for r in client.get("/api/ai-governance/reviews").json()
+        if r["system_name"] == "Medical Triage Risk Scorer"
+    )
+    evidence = next(
+        item for item in review["evidence_items"] if item["requirement"] == "Data governance"
+    )
+
+    response = client.patch(
+        f"/api/ai-governance/evidence/{evidence['id']}",
+        json={
+            "status": "provided",
+            "evidence_uri": "trust://ai-evidence/medical/data-governance",
+        },
+    )
+    assert response.status_code == 200
+
+    packets = client.get(
+        f"/api/ai-governance/reviews/{review['id']}/implementation-packets"
+    ).json()
+    packet = next(packet for packet in packets if packet["requirement_name"] == "Data governance")
+    assert packet["status"] == "provided"
+    assert packet["evidence_uri"] == "trust://ai-evidence/medical/data-governance"
+
+
+def test_rejected_evidence_blocks_approval(client):
+    review = next(
+        r for r in client.get("/api/ai-governance/reviews").json()
+        if r["system_name"] == "Vendor Risk Copilot"
+    )
+    evidence = review["evidence_items"][0]
+    assert client.patch(
+        f"/api/ai-governance/evidence/{evidence['id']}",
+        json={"status": "rejected"},
+    ).status_code == 200
+
+    response = client.patch(
+        f"/api/ai-governance/reviews/{review['id']}/decision",
+        json={
+            "status": "approved",
+            "decision_summary": "Approved for launch.",
+            "next_review_date": "2026-09-30",
+        },
+    )
+
+    assert response.status_code == 409
+    assert "Rejected evidence" in response.json()["detail"]
+
+
+def test_accepted_evidence_clears_implementation_packet(client):
+    review = next(
+        r for r in client.get("/api/ai-governance/reviews").json()
+        if r["system_name"] == "Medical Triage Risk Scorer"
+    )
+    evidence = next(
+        item for item in review["evidence_items"] if item["requirement"] == "Data governance"
+    )
+
+    assert client.patch(
+        f"/api/ai-governance/evidence/{evidence['id']}",
+        json={
+            "status": "accepted",
+            "evidence_uri": "trust://ai-evidence/medical/data-governance",
+        },
+    ).status_code == 200
+
+    packets = client.get(
+        f"/api/ai-governance/reviews/{review['id']}/implementation-packets"
+    ).json()
+    assert all(packet["requirement_name"] != "Data governance" for packet in packets)
+
+
+def test_review_packet_detail_is_tenant_scoped(db_session, other_org_client):
+    with db_session() as db:
+        review = list_ai_governance_reviews(db, DEFAULT_ORG_ID)[0]
+
+    response = other_org_client.get(
+        f"/api/ai-governance/reviews/{review.id}/implementation-packets"
+    )
+
+    assert response.status_code == 404
 
 
 def test_invalid_evidence_status_returns_422(client):
@@ -283,7 +401,7 @@ def test_approval_succeeds_once_evidence_is_complete(client):
             response = client.patch(
                 f"/api/ai-governance/evidence/{item['id']}",
                 json={
-                    "status": "provided",
+                    "status": "accepted",
                     "evidence_uri": f"trust://ai-evidence/medical/{item['requirement'].lower().replace(' ', '-')}",
                     "notes": "Provided for launch approval.",
                 },

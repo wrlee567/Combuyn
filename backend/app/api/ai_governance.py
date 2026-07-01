@@ -16,6 +16,7 @@ from app.schemas.ai_governance import (
     AIEvidenceItemOut,
     AIEvidencePatch,
     AIGovernanceReviewOut,
+    AIImplementationPacketOut,
     AIReviewDecisionPatch,
     AIImpactAssessmentOut,
     AIInventorySummary,
@@ -31,6 +32,7 @@ from app.schemas.ai_governance import (
 from app.services.ai_governance import (
     EU_AI_ACT_QUESTIONNAIRE,
     build_ai_inventory_summary,
+    build_implementation_packets,
     build_launch_gate_payload,
     build_public_trust_center,
     create_classification_for_system,
@@ -140,6 +142,21 @@ def list_governance_reviews(
     return list_ai_governance_reviews(db, org_id)
 
 
+@router.get(
+    "/reviews/{review_id}/implementation-packets",
+    response_model=list[AIImplementationPacketOut],
+)
+def review_implementation_packets(
+    review_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    org_id: uuid.UUID = Depends(current_org),
+) -> list[AIImplementationPacketOut]:
+    packets = build_implementation_packets(db, org_id, review_id)
+    if packets is None:
+        raise HTTPException(status_code=404, detail="Governance review not found")
+    return packets
+
+
 @router.patch("/evidence/{evidence_id}", response_model=AIEvidenceItemOut)
 def patch_evidence(
     evidence_id: uuid.UUID,
@@ -153,6 +170,8 @@ def patch_evidence(
         evidence_id,
         status=payload.status,
         evidence_uri=payload.evidence_uri,
+        reviewer_decision=payload.reviewer_decision,
+        reviewer_notes=payload.reviewer_notes,
         notes=payload.notes,
     )
     if evidence is None:

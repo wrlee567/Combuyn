@@ -122,7 +122,30 @@ class AIEvidenceItemOut(ORMModel):
     evidence_uri: str
     owner: str
     status: str
+    reviewer_decision: str = ""
+    reviewer_notes: str = ""
     notes: str
+
+
+class AIImplementationPacketOut(BaseModel):
+    id: str
+    review_id: uuid.UUID
+    evidence_id: uuid.UUID
+    requirement_name: str
+    source_framework: str
+    regulatory_driver: str
+    implementation_steps: list[str]
+    evidence_requirements: list[str]
+    owner: str
+    due_date: date | None
+    review_cadence: str
+    status: str
+    evidence_status: str
+    evidence_uri: str
+    acceptance_criteria: list[str]
+    current_evidence_title: str
+    reviewer_decision: str = ""
+    reviewer_notes: str = ""
 
 
 class AIGovernanceReviewOut(ORMModel):
@@ -259,6 +282,8 @@ class AILaunchGateOut(BaseModel):
 class AIEvidencePatch(BaseModel):
     status: str | None = None
     evidence_uri: str | None = None
+    reviewer_decision: str | None = None
+    reviewer_notes: str | None = None
     notes: str | None = None
 
     @field_validator("status")
@@ -270,6 +295,18 @@ class AIEvidencePatch(BaseModel):
         if value not in allowed:
             raise ValueError(
                 f"Invalid evidence status. Allowed statuses: {', '.join(sorted(allowed))}"
+            )
+        return value
+
+    @field_validator("reviewer_decision")
+    @classmethod
+    def _validate_reviewer_decision(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            return value
+        allowed = {"waived"}
+        if value not in allowed:
+            raise ValueError(
+                f"Invalid reviewer decision. Allowed decisions: {', '.join(sorted(allowed))}"
             )
         return value
 

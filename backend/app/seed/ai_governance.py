@@ -332,14 +332,14 @@ def seed_ai_demo(db: Session) -> dict[str, int]:
                 "Data governance",
                 "attestation",
                 f"{system.name} data provenance and training exclusion",
-                "provided" if not system.medical_device_related else "missing",
+                "accepted" if not system.medical_device_related else "missing",
                 "Data source, retention, and training boundary evidence.",
             ),
             (
                 "Human oversight",
                 "procedure",
                 f"{system.name} human oversight procedure",
-                "provided" if not system.medical_device_related else "missing",
+                "accepted" if not system.medical_device_related else "missing",
                 "Reviewer roles, override path, and escalation workflow.",
             ),
             (
@@ -350,6 +350,16 @@ def seed_ai_demo(db: Session) -> dict[str, int]:
                 "EU AI Act notice and customer-facing disclosure package.",
             ),
         ]
+        if system.medical_device_related:
+            evidence_templates.append(
+                (
+                    "Medical AI validation",
+                    "validation",
+                    f"{system.name} clinical validation and SOUP supplier package",
+                    "missing",
+                    "Clinical validation protocol, SOUP supplier evidence, and monitoring plan.",
+                )
+            )
         for requirement, evidence_type, title, status, notes in evidence_templates:
             exists = db.scalar(
                 select(AIEvidenceItem).where(

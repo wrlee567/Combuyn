@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   api,
   type AIEvidenceItem,
+  type AIImplementationPacket,
   type AILaunchGate,
   type EvidencePatch,
 } from "../api";
@@ -20,6 +21,8 @@ export default function AILaunchGate() {
   const [gate, setGate] = useState<AILaunchGate | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [packetError, setPacketError] = useState<string | null>(null);
+  const [packets, setPackets] = useState<AIImplementationPacket[]>([]);
   const [saving, setSaving] = useState<string | null>(null);
   const [decisionSummary, setDecisionSummary] = useState("");
   const [nextReviewDate, setNextReviewDate] = useState("");
@@ -30,10 +33,21 @@ export default function AILaunchGate() {
     setError(null);
     return api
       .aiLaunchGate(id)
-      .then((data) => {
+      .then(async (data) => {
         setGate(data);
         setDecisionSummary(data.governance_review?.decision_summary ?? "");
         setNextReviewDate(data.governance_review?.next_review_date ?? "");
+        setPacketError(null);
+        if (!data.governance_review) {
+          setPackets([]);
+          return;
+        }
+        try {
+          setPackets(await api.aiImplementationPackets(data.governance_review.id));
+        } catch (e) {
+          setPackets([]);
+          setPacketError(String((e as Error).message ?? e));
+        }
       })
       .catch((e) => setError(String(e.message ?? e)))
       .finally(() => setLoading(false));
@@ -45,8 +59,7 @@ export default function AILaunchGate() {
 
   const canApprove =
     gate?.governance_review !== null &&
-    gate?.readiness.evidence_missing === 0 &&
-    gate?.readiness.evidence_rejected === 0;
+    gate?.readiness.approval_blockers.length === 0;
 
   const stateLabel = gate ? gate.readiness.state.replace("_", " ") : "";
 
@@ -190,6 +203,39 @@ export default function AILaunchGate() {
         </div>
       </section>
 
+      <section className="panel">
+        <div className="panel-heading">
+          <div>
+            <h2>Implementation Packets</h2>
+            <p className="panel-subtitle">
+              {packets.length} launch-gate blockers require implementation evidence
+            </p>
+          </div>
+          <span className={packets.length ? "badge amber" : "badge green"}>
+            {packets.length ? "action required" : "clear"}
+          </span>
+        </div>
+        {packetError ? (
+          <div className="notice error">Packet data unavailable: {packetError}</div>
+        ) : null}
+        <ImplementationPackets
+          packets={packets}
+          saving={saving}
+          onAccept={(packet) =>
+            saveEvidence(packet.evidence_id, {
+              status: "accepted",
+              reviewer_decision: "",
+            })
+          }
+          onWaive={(packet) =>
+            saveEvidence(packet.evidence_id, {
+              reviewer_decision: "waived",
+              reviewer_notes: "Reviewer waived this launch-gate requirement.",
+            })
+          }
+        />
+      </section>
+
       <div className="launch-grid">
         <section className="panel launch-section">
           <div className="panel-heading">
@@ -313,6 +359,85 @@ export default function AILaunchGate() {
   );
 }
 
+function ImplementationPackets({
+  packets,
+  saving,
+  onAccept,
+  onWaive,
+}: {
+  packets: AIImplementationPacket[];
+  saving: string | null;
+  onAccept: (packet: AIImplementationPacket) => void;
+  onWaive: (packet: AIImplementationPacket) => void;
+}) {
+  if (!packets.length) {
+    return (
+      <div className="empty-state small">
+        No incomplete launch-gate requirements found.
+      </div>
+    );
+  }
+
+  return (
+    <div className="packet-list">
+      {packets.map((packet) => (
+        <div className="packet-row" key={packet.id}>
+          <div className="packet-main">
+            <div className="packet-title-line">
+              <div>
+                <div className="control-key">{packet.requirement_name}</div>
+                <strong>{packet.current_evidence_title}</strong>
+              </div>
+              <span className={packetStatusBadge(packet.status)}>{packet.status}</span>
+            </div>
+            <div className="packet-meta">
+              <span className="badge generic">{packet.source_framework}</span>
+              <span className="badge generic">{packet.owner}</span>
+              <span className="badge generic">
+                {packet.due_date ? formatDate(packet.due_date) : packet.review_cadence}
+              </span>
+            </div>
+            <p>{packet.regulatory_driver}</p>
+            <PacketChecklist title="Steps" items={packet.implementation_steps} />
+            <PacketChecklist title="Evidence" items={packet.evidence_requirements} />
+            <PacketChecklist title="Acceptance" items={packet.acceptance_criteria} />
+          </div>
+          <div className="packet-actions">
+            <button
+              className="btn secondary"
+              disabled={saving === packet.evidence_id}
+              onClick={() => onAccept(packet)}
+            >
+              Accept
+            </button>
+            <button
+              className="btn ghost"
+              disabled={saving === packet.evidence_id}
+              onClick={() => onWaive(packet)}
+            >
+              Waive
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PacketChecklist({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div className="packet-checklist">
+      <div className="domain">{title}</div>
+      {items.map((item) => (
+        <div className="packet-check" key={item}>
+          <span aria-hidden="true">-</span>
+          <span>{item}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function EvidenceEditor({
   item,
   saving,
@@ -403,6 +528,13 @@ function stateBadge(value: string) {
   if (value === "approved") return "badge green";
   if (value === "ready") return "badge nist";
   if (value === "blocked") return "badge red";
+  return "badge amber";
+}
+
+function packetStatusBadge(value: string) {
+  if (value === "accepted" || value === "waived") return "badge green";
+  if (value === "rejected") return "badge red";
+  if (value === "provided") return "badge nist";
   return "badge amber";
 }
 

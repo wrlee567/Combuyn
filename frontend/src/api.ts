@@ -12,6 +12,7 @@ import {
   demoFrameworks,
   demoGuardrails,
   demoImpactAssessments,
+  demoImplementationPackets,
   demoISO42001Controls,
   demoMedicalRisks,
   demoSummary,
@@ -296,7 +297,30 @@ export interface AIEvidenceItem {
   evidence_uri: string;
   owner: string;
   status: string;
+  reviewer_decision?: string;
+  reviewer_notes?: string;
   notes: string;
+}
+
+export interface AIImplementationPacket {
+  id: string;
+  review_id: string;
+  evidence_id: string;
+  requirement_name: string;
+  source_framework: string;
+  regulatory_driver: string;
+  implementation_steps: string[];
+  evidence_requirements: string[];
+  owner: string;
+  due_date: string | null;
+  review_cadence: string;
+  status: string;
+  evidence_status: string;
+  evidence_uri: string;
+  acceptance_criteria: string[];
+  current_evidence_title: string;
+  reviewer_decision: string;
+  reviewer_notes: string;
 }
 
 export interface AIGovernanceReview {
@@ -406,6 +430,8 @@ export interface AILaunchGate {
 export interface EvidencePatch {
   status?: "missing" | "provided" | "accepted" | "rejected";
   evidence_uri?: string;
+  reviewer_decision?: "" | "waived";
+  reviewer_notes?: string;
   notes?: string;
 }
 
@@ -558,13 +584,11 @@ async function request<T>(
   init?: RequestInit,
   retryOnUnauthorized = true,
 ): Promise<T> {
-  const requestInit = DEMO_MODE
-    ? init
-    : withAuth(init, await tokenForRequest());
+  const requestInit = withAuth(init, await tokenForRequest());
   const res = await fetch(apiUrl(path), requestInit);
   const body = await readBody(res, path);
 
-  if (!DEMO_MODE && res.status === 401 && retryOnUnauthorized) {
+  if (res.status === 401 && retryOnUnauthorized) {
     clearToken();
     await fetchDemoToken();
     return request<T>(path, init, false);
@@ -600,7 +624,7 @@ function updateDemoEvidence(id: string, body: EvidencePatch): AIEvidenceItem {
     if (!item) continue;
     Object.assign(item, body);
     review.evidence_ready = review.evidence_items.filter((evidence) =>
-      ["accepted", "provided"].includes(evidence.status),
+      evidence.status === "accepted" || evidence.reviewer_decision === "waived",
     ).length;
     review.evidence_missing = review.evidence_items.filter(
       (evidence) => evidence.status === "missing",
@@ -618,9 +642,12 @@ function updateDemoReviewDecision(
   if (!review) throw new Error("Governance review not found");
   if (
     ["approved", "approved with conditions"].includes(body.status) &&
-    review.evidence_items.some((item) => ["missing", "rejected"].includes(item.status))
+    review.evidence_items.some(
+      (item) =>
+        item.status !== "accepted" && item.reviewer_decision !== "waived",
+    )
   ) {
-    throw new Error("Missing or rejected evidence blocks approval.");
+    throw new Error("Evidence must be accepted or waived before approval.");
   }
   review.status = body.status;
   review.decision_summary = body.decision_summary;
@@ -709,6 +736,11 @@ export const api = {
     getOrDemo<AIGovernanceReview[]>(
       "/api/ai-governance/reviews",
       demoAIReviews,
+    ),
+  aiImplementationPackets: (reviewId: string) =>
+    getOrDemo<AIImplementationPacket[]>(
+      `/api/ai-governance/reviews/${reviewId}/implementation-packets`,
+      demoImplementationPackets(reviewId),
     ),
   updateAIEvidence: (id: string, body: EvidencePatch) =>
     DEMO_MODE

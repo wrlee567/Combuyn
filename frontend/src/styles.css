@@ -386,6 +386,67 @@ th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: upp
   display: grid;
   gap: 12px;
 }
+.packet-list {
+  display: grid;
+  gap: 12px;
+}
+.packet-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  background: rgba(255,255,255,0.02);
+}
+.packet-main {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.packet-title-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+.packet-title-line strong {
+  display: block;
+  font-size: 14px;
+  line-height: 1.35;
+  margin-top: 2px;
+}
+.packet-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.packet-row p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0;
+}
+.packet-checklist {
+  display: grid;
+  gap: 5px;
+}
+.packet-check {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  gap: 6px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.35;
+}
+.packet-check span:first-child {
+  color: var(--accent);
+}
+.packet-actions {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
 .evidence-edit-row {
   display: grid;
   grid-template-columns: minmax(220px, 0.8fr) minmax(320px, 1.2fr);
@@ -460,11 +521,12 @@ th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: upp
   .nav a { margin-bottom: 0; }
   .main { padding: 24px; max-width: none; }
   .cards, .ai-cards { grid-template-columns: repeat(2, 1fr); }
-  .split, .trust-grid, .review-grid, .form-grid, .launch-grid, .evidence-edit-row { grid-template-columns: 1fr; }
+  .split, .trust-grid, .review-grid, .form-grid, .launch-grid, .evidence-edit-row, .packet-row { grid-template-columns: 1fr; }
   .launch-header { display: block; }
   .readiness-dial { margin-top: 16px; }
   .evidence-controls { grid-template-columns: 1fr; }
   .evidence-controls textarea { grid-column: auto; }
+  .packet-actions { flex-wrap: wrap; }
   .panel-heading { display: block; }
   table { display: block; overflow-x: auto; }
 }

@@ -5,6 +5,7 @@ import type {
   AIGovernanceSummary,
   AIGovernanceReview,
   AIGuardrail,
+  AIImplementationPacket,
   AILaunchGate,
   AIComplianceTask,
   AIImpactAssessment,
@@ -278,8 +279,8 @@ export const demoAIGovernanceSummary: AIGovernanceSummary = {
   open_tasks: 8,
   passing_guardrails: 6,
   trust_center_frameworks: 5,
-  evidence_items: 12,
-  missing_evidence: 3,
+  evidence_items: 13,
+  missing_evidence: 4,
   overdue_reviews: 1,
 };
 
@@ -482,7 +483,7 @@ export const demoAIReviews: AIGovernanceReview[] = [
         title: "Foundation Model Gateway data provenance and training exclusion",
         evidence_uri: "trust://ai-evidence/foundation-model-gateway/data-governance",
         owner: "Platform Security",
-        status: "provided",
+        status: "accepted",
         notes: "Data source, retention, and training boundary evidence.",
       },
       {
@@ -492,7 +493,7 @@ export const demoAIReviews: AIGovernanceReview[] = [
         title: "Foundation Model Gateway human oversight procedure",
         evidence_uri: "trust://ai-evidence/foundation-model-gateway/human-oversight",
         owner: "Platform Security",
-        status: "provided",
+        status: "accepted",
         notes: "Reviewer roles, override path, and escalation workflow.",
       },
       {
@@ -520,7 +521,7 @@ export const demoAIReviews: AIGovernanceReview[] = [
       "Clinical validation, SOUP supplier evidence, and human oversight records are required before production approval.",
     next_review_date: "2026-07-01",
     evidence_ready: 1,
-    evidence_missing: 3,
+    evidence_missing: 4,
     evidence_items: [
       {
         id: "review-demo-2-evidence-1",
@@ -562,6 +563,16 @@ export const demoAIReviews: AIGovernanceReview[] = [
         status: "missing",
         notes: "EU AI Act notice and customer-facing disclosure package.",
       },
+      {
+        id: "review-demo-2-evidence-5",
+        requirement: "Medical AI validation",
+        evidence_type: "validation",
+        title: "Medical Triage Risk Scorer clinical validation and SOUP supplier package",
+        evidence_uri: "",
+        owner: "Medical Device Engineering",
+        status: "missing",
+        notes: "Clinical validation protocol, SOUP supplier evidence, and monitoring plan.",
+      },
     ],
   },
   {
@@ -595,7 +606,7 @@ export const demoAIReviews: AIGovernanceReview[] = [
         title: "Vendor Risk Copilot data provenance and training exclusion",
         evidence_uri: "trust://ai-evidence/vendor-risk-copilot/data-governance",
         owner: "GRC Automation",
-        status: "provided",
+        status: "accepted",
         notes: "Data source, retention, and training boundary evidence.",
       },
       {
@@ -605,7 +616,7 @@ export const demoAIReviews: AIGovernanceReview[] = [
         title: "Vendor Risk Copilot human oversight procedure",
         evidence_uri: "trust://ai-evidence/vendor-risk-copilot/human-oversight",
         owner: "GRC Automation",
-        status: "provided",
+        status: "accepted",
         notes: "Reviewer roles, override path, and escalation workflow.",
       },
       {
@@ -766,11 +777,18 @@ export function demoLaunchGate(id: string): AILaunchGate {
       (candidate) => candidate.ai_system_id === system.id,
     ) ?? null;
   const tasks = demoTasks.filter((task) => task.ai_system_id === system.id);
-  const evidenceReady = evidence.filter((item) =>
-    ["accepted", "provided"].includes(item.status),
+  const evidenceReady = evidence.filter(
+    (item) => item.status === "accepted" || item.reviewer_decision === "waived",
   ).length;
-  const evidenceMissing = evidence.filter((item) => item.status === "missing").length;
-  const evidenceRejected = evidence.filter((item) => item.status === "rejected").length;
+  const evidenceMissing = evidence.filter(
+    (item) => item.status === "missing" && item.reviewer_decision !== "waived",
+  ).length;
+  const evidenceProvided = evidence.filter(
+    (item) => item.status === "provided" && item.reviewer_decision !== "waived",
+  ).length;
+  const evidenceRejected = evidence.filter(
+    (item) => item.status === "rejected" && item.reviewer_decision !== "waived",
+  ).length;
   const guardrailChecks = guardrails
     ? [
         guardrails.privacy_status === "passing",
@@ -788,7 +806,7 @@ export function demoLaunchGate(id: string): AILaunchGate {
     review !== null && ["approved", "approved with conditions"].includes(review.status);
   const state = reviewApproved
     ? "approved"
-    : evidenceMissing > 0 || evidenceRejected > 0
+    : evidenceMissing > 0 || evidenceProvided > 0 || evidenceRejected > 0
       ? "blocked"
       : evidence.length > 0 && evidenceReady === evidence.length
         ? "ready"
@@ -821,8 +839,134 @@ export function demoLaunchGate(id: string): AILaunchGate {
       tasks_total: tasks.length,
       approval_blockers: [
         ...(evidenceMissing ? ["Missing evidence must be provided before approval."] : []),
+        ...(evidenceProvided ? ["Provided evidence must be accepted or waived before approval."] : []),
         ...(evidenceRejected ? ["Rejected evidence must be remediated before approval."] : []),
       ],
     },
   };
+}
+
+const demoPacketTemplates: Record<
+  string,
+  Pick<
+    AIImplementationPacket,
+    | "source_framework"
+    | "regulatory_driver"
+    | "implementation_steps"
+    | "evidence_requirements"
+    | "acceptance_criteria"
+  >
+> = {
+  "data governance": {
+    source_framework: "EU AI Act high-risk controls / ISO/IEC 42001 A.7",
+    regulatory_driver: "Training, validation, test, input, and operational data must be fit for purpose and protected.",
+    implementation_steps: [
+      "Document data sources, licenses, lineage, and transformation boundaries.",
+      "Confirm customer data, prompts, and completions are excluded from provider training where required.",
+      "Validate retention, access control, quality, bias, and representativeness checks.",
+    ],
+    evidence_requirements: [
+      "Data provenance record",
+      "Training exclusion or retention attestation",
+      "Data quality and protection review",
+    ],
+    acceptance_criteria: [
+      "Evidence identifies all regulated or sensitive data classes.",
+      "Training and retention boundaries match the launch architecture.",
+      "Reviewer accepts data quality and protection controls.",
+    ],
+  },
+  "human oversight": {
+    source_framework: "EU AI Act Article 14 / ISO/IEC 42001 A.9.3",
+    regulatory_driver: "Human operators must be able to understand, supervise, override, and escalate AI outputs.",
+    implementation_steps: [
+      "Assign accountable operators and reviewer roles.",
+      "Document override, escalation, logging, and fallback procedures.",
+      "Validate that users receive instructions for appropriate use and limitations.",
+    ],
+    evidence_requirements: [
+      "Human oversight procedure",
+      "Operator instructions",
+      "Escalation and override record",
+    ],
+    acceptance_criteria: [
+      "Named owners can intervene before harmful use or release.",
+      "Override and escalation paths are tested or attested.",
+      "Procedure aligns to the classified risk tier and role.",
+    ],
+  },
+  "transparency notice": {
+    source_framework: "EU AI Act Article 50 / ISO/IEC 42001 A.8",
+    regulatory_driver: "People must receive clear notice when AI interaction, synthetic content, or other transparency-triggering uses apply.",
+    implementation_steps: [
+      "Confirm whether direct interaction, biometric use, or synthetic content triggers notice obligations.",
+      "Publish user-facing and customer-facing notice text for the launch scope.",
+      "Link notice evidence to the Trust Center or product disclosure location.",
+    ],
+    evidence_requirements: [
+      "Transparency notice",
+      "Content labeling or user disclosure",
+      "Trust Center reference",
+    ],
+    acceptance_criteria: [
+      "Notice explains the AI use in plain operational terms.",
+      "Disclosure is available before or during affected user interaction.",
+      "Reviewer accepts the notice as aligned to classification answers.",
+    ],
+  },
+  "medical ai validation": {
+    source_framework: "Medical AI validation / NIST AI RMF Measure",
+    regulatory_driver: "Medical AI systems require validation evidence before production use in regulated clinical workflows.",
+    implementation_steps: [
+      "Lock validation protocol, dataset split strategy, and clinical representativeness assumptions.",
+      "Review SOUP supplier documentation, model behavior risks, and human clinical override controls.",
+      "Record validation results and post-market monitoring triggers.",
+    ],
+    evidence_requirements: [
+      "Clinical validation protocol and results",
+      "SOUP supplier evidence",
+      "Post-market monitoring plan",
+    ],
+    acceptance_criteria: [
+      "Validation protocol matches the intended medical workflow.",
+      "Dataset split, leakage, and representativeness risks are addressed.",
+      "Clinical owner accepts residual risk and monitoring plan.",
+    ],
+  },
+};
+
+export function demoImplementationPackets(reviewId: string): AIImplementationPacket[] {
+  const review = demoAIReviews.find((candidate) => candidate.id === reviewId);
+  if (!review) return [];
+
+  return review.evidence_items
+    .filter(
+      (item) =>
+        item.status !== "accepted" && item.reviewer_decision !== "waived",
+    )
+    .map((item) => {
+      const template =
+        demoPacketTemplates[item.requirement.toLowerCase()] ??
+        demoPacketTemplates["data governance"];
+      return {
+        id: `packet-${item.id}`,
+        review_id: review.id,
+        evidence_id: item.id,
+        requirement_name: item.requirement,
+        source_framework: template.source_framework,
+        regulatory_driver: template.regulatory_driver,
+        implementation_steps: template.implementation_steps,
+        evidence_requirements: template.evidence_requirements,
+        owner: item.owner,
+        due_date: review.next_review_date,
+        review_cadence: "By next review date and on material change",
+        status: item.reviewer_decision === "waived" ? "waived" : item.status,
+        evidence_status: item.status,
+        evidence_uri: item.evidence_uri,
+        acceptance_criteria: template.acceptance_criteria,
+        current_evidence_title: item.title,
+        reviewer_decision: item.reviewer_decision ?? "",
+        reviewer_notes: item.reviewer_notes ?? "",
+      };
+    });
 }
